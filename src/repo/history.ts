@@ -2,6 +2,7 @@ import type { ModelMessage } from "ai";
 import { getPref, setPref, deletePref } from "./prefs.js";
 
 const HISTORY_KEY = "__history";
+const SKILLS_KEY = "__skills";
 const MAX_MESSAGES = 40;
 
 /**
@@ -70,4 +71,31 @@ export function setHistory(chatId: string, msgs: ModelMessage[]): void {
 
 export function clearHistory(chatId: string): void {
   deletePref(chatId, HISTORY_KEY);
+  deletePref(chatId, SKILLS_KEY);
+}
+
+/**
+ * Which skills this conversation has opened, and so which tools stay available.
+ *
+ * Unlocks have to outlive a single turn. When they reset per message, a follow-up like a bare
+ * "finalize" arrives with finalize_bill missing from the tool surface — and a model that cannot
+ * see the tool may claim the sale is done rather than re-read the skill. Observed exactly that:
+ * "Bill finalized. Sale complete." with the draft still open and stock untouched.
+ *
+ * Scoped to the conversation, so `/new` closes them again along with the history.
+ */
+export function getUnlockedSkills(chatId: string): Set<string> {
+  const raw = getPref(chatId, SKILLS_KEY);
+  if (!raw) return new Set();
+  try {
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? (parsed as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function setUnlockedSkills(chatId: string, skills: ReadonlySet<string>): void {
+  if (skills.size === 0) return;
+  setPref(chatId, SKILLS_KEY, JSON.stringify([...skills].sort()));
 }

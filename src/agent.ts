@@ -1,7 +1,7 @@
 import { generateText, stepCountIs, hasToolCall, type LanguageModel, type ModelMessage } from "ai";
 import { MODEL } from "./config.js";
 import { getPrefs } from "./repo/prefs.js";
-import { getHistory, setHistory, clearHistory } from "./repo/history.js";
+import { getHistory, setHistory, clearHistory, getUnlockedSkills, setUnlockedSkills } from "./repo/history.js";
 import { toolset, type StoreTool } from "./lib/tool.js";
 import { skillIndex, readSkillTool } from "./lib/skills.js";
 import { inventoryTools } from "./tools/inventory.js";
@@ -136,7 +136,9 @@ export async function runAgent(
   // Once a tool has run, the turn has side effects (stock received, khata charged) that a
   // replay would repeat, so we surface the error instead and let the owner resend.
   let toolRan = false;
-  const unlocked = new Set<string>();
+  // Skills opened earlier in this conversation stay open: a follow-up turn ("finalize", "make it 6")
+  // must still be able to reach the tools the previous turn was using.
+  const unlocked = getUnlockedSkills(chatId);
   const convo: ModelMessage[] = [...messages];
   let steps = 0;
   let text = "";
@@ -166,19 +168,26 @@ export async function runAgent(
     steps += result.steps.length;
     text = result.text.trim() || text;
 
-    const read = result.steps
-      .flatMap((s) => s.toolCalls)
+    // Did the pass END on a skill read, or did the model actually finish? The distinction
+    // decides whether we go round again: a pass cut short by hasToolCall has produced no
+    // answer yet, even when the skill it read was already open (a re-read for the playbook,
+    // now that the body is stripped from history). Breaking there loses the whole turn.
+    const lastStep = result.steps.at(-1);
+    const stoppedToRead = (lastStep?.toolCalls ?? []).some((c) => c.toolName === "read_skill");
+
+    for (const name of (lastStep?.toolCalls ?? [])
       .filter((c) => c.toolName === "read_skill")
       // One call may name several skills ("billing, documents") — unlock all of them.
       .flatMap((c) => String((c.input as { name?: string })?.name ?? "").split(","))
       .map((n) => n.trim().toLowerCase())
-      .filter((n) => n && !unlocked.has(n));
+      .filter(Boolean))
+      unlocked.add(name);
 
-    if (read.length === 0) break; // nothing new opened: this pass was the answer
-    for (const n of read) unlocked.add(n);
+    if (!stoppedToRead) break; // the model finished: this pass holds the reply
   }
 
   setHistory(chatId, convo);
+  setUnlockedSkills(chatId, unlocked);
   return { text: text || "(no response)", steps };
 }
 
