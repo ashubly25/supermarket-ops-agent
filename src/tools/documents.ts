@@ -1,9 +1,7 @@
 import { tool } from "../lib/tool.js";
 import { z } from "zod";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
-import { extname, join } from "node:path";
+import { join } from "node:path";
 import * as bills from "../repo/bills.js";
-import { getPref, setPref } from "../repo/prefs.js";
 import { queueFile } from "../repo/updates.js";
 import { generateInvoicePdf } from "../docs/invoice.js";
 import { shopInfo } from "../lib/shop.js";
@@ -67,35 +65,19 @@ export function makeDocumentTools(ctx: Ctx) {
     }
   );
 
-  const setLogo = tool(
-    "set_shop_logo",
-    "Use the photo the owner just sent as the shop logo on invoices and decks. Call this only right after the owner sends an image and says it's their logo/sign board.",
-    {},
-    async () => {
-      const src = getPref(ctx.chatId, "__last_photo");
-      if (!src || !existsSync(src)) return err("I don't have a recent photo from you. Send the logo image first, then ask again.");
-      const dir = join(ARTIFACTS_DIR, ctx.chatId);
-      mkdirSync(dir, { recursive: true });
-      const dest = join(dir, `logo${extname(src) || ".jpg"}`);
-      copyFileSync(src, dest);
-      setPref(ctx.chatId, "shop_logo", dest);
-      return ok("Logo saved — it'll appear on your invoices and analysis decks from now on.", { logo: dest });
-    }
-  );
-
   const previewBranding = tool(
     "preview_branding",
-    "Show the shop's current invoice branding (name, GSTIN, colour, template, logo, footer) so the owner can confirm or change it.",
+    "Show the shop's current invoice branding (name, GSTIN, colour, template, footer) so the owner can confirm or change it.",
     {},
     async () => {
       const s = shopInfo(ctx.chatId);
       return ok(
         `Invoice branding:\n• Shop: ${s.name}\n• GSTIN: ${s.gstin}\n• Address: ${s.address}\n• Phone: ${s.phone}\n` +
-          `• Template: ${s.template}\n• Brand colour: #${s.brand_color}\n• Logo: ${s.logo_path ? "set" : "not set"}\n• Footer: ${s.footer ?? "(default)"}`,
+          `• Template: ${s.template}\n• Brand colour: #${s.brand_color}\n• Footer: ${s.footer ?? "(default)"}`,
         { shop: s }
       );
     }
   );
 
-  return [invoicePdf, analysisDeck, setLogo, previewBranding];
+  return [invoicePdf, analysisDeck, previewBranding];
 }

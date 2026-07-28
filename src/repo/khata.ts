@@ -35,15 +35,16 @@ export function charge(name: string, amount: number, opts: { billId?: number; no
   });
 }
 
-/** Record a payment against a khata. Refuses unknown customer or over-payment. */
+/**
+ * Record a payment against a khata. Refuses an unknown customer, but ALLOWS paying
+ * more than the balance: a customer settling ₹380 with a ₹500 note and saying "keep
+ * it for next time" is routine, and a paper khata carries that as an advance. The
+ * balance goes negative, which the schema already defines as the shop owing them.
+ */
 export function payment(name: string, amount: number, note?: string): Customer {
   return immediateTxn(() => {
     const c = findCustomer(name);
     if (!c) throw new Error(`No khata found for "${name}". Nothing to settle.`);
-    if (amount > c.khata_balance + 1e-6)
-      throw new Error(
-        `Payment ₹${amount.toFixed(2)} exceeds ${c.name}'s balance ₹${c.khata_balance.toFixed(2)}. Confirm the amount.`
-      );
     db.prepare("UPDATE customers SET khata_balance = khata_balance - ? WHERE id = ?").run(amount, c.id);
     db.prepare(
       "INSERT INTO khata_txns (customer_id, amount, kind, bill_id, note) VALUES (?,?, 'payment', NULL, ?)"

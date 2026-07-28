@@ -52,7 +52,7 @@ function scriptedModel(seen: { toolResult?: string }) {
 
 test("agent loop: tool call executes against the DB and the text comes back", async () => {
   const seen: { toolResult?: string } = {};
-  const { text, steps } = await runAgent(CHAT, "how much sugar?", undefined, scriptedModel(seen) as any);
+  const { text, steps } = await runAgent(CHAT, "how much sugar?", scriptedModel(seen) as any);
   assert.equal(text, "Sugar is in stock.");
   assert.equal(steps, 2, "one tool step + one answer step");
   assert.match(seen.toolResult ?? "", /sugar/i, "find_product result must reach the model");
@@ -64,21 +64,10 @@ test("history persists across turns and /new clears only it", async () => {
   assert.ok(history.getHistory(CHAT).length > 0, "prior turn was stored");
 
   const seen: { toolResult?: string } = {};
-  await runAgent(CHAT, "and rice?", undefined, scriptedModel(seen) as any);
+  await runAgent(CHAT, "and rice?", scriptedModel(seen) as any);
   assert.ok(history.getHistory(CHAT).length >= 4, "second turn appends to the same thread");
 
   resetSession(CHAT);
   assert.equal(history.getHistory(CHAT).length, 0, "session cleared");
   assert.equal(prefs.getPref(CHAT, "default_payment"), "upi", "durable pref must remain");
-});
-
-test("photo turns are stored without the image bytes", async () => {
-  const CHAT2 = "agent-photo";
-  const msgs = [
-    { role: "user" as const, content: [{ type: "image" as const, image: Buffer.from("x".repeat(5000)), mediaType: "image/jpeg" }, { type: "text" as const, text: "what is this" }] },
-  ];
-  history.setHistory(CHAT2, msgs as any);
-  const stored = JSON.stringify(history.getHistory(CHAT2));
-  assert.ok(stored.length < 500, "image bytes must not be persisted");
-  assert.match(stored, /photo sent/);
 });

@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { getPrefs } from "../repo/prefs.js";
 
 /** Shop identity + branding used on invoices and decks. All owner-settable prefs. */
@@ -10,8 +9,6 @@ export interface ShopInfo {
   state: string;
   /** Hex without '#', e.g. "1F6FEB". Drives invoice accents and deck theme. */
   brand_color: string;
-  /** Absolute path to a logo image (owner sends a photo, sets it via a tool). */
-  logo_path?: string;
   /** Free-text line printed at the bottom of every invoice. */
   footer?: string;
   /** classic = light header; modern = full-bleed colour band. */
@@ -23,7 +20,6 @@ const HEX = /^#?([0-9a-fA-F]{6})$/;
 export function shopInfo(chatId: string): ShopInfo {
   const p = getPrefs(chatId);
   const color = HEX.exec(p.brand_color ?? "")?.[1]?.toUpperCase() ?? "1F6FEB";
-  const logo = p.shop_logo && existsSync(p.shop_logo) ? p.shop_logo : undefined;
   return {
     name: p.shop_name ?? "My Kirana Store",
     gstin: p.gstin ?? "29ABCDE1234F1Z5",
@@ -31,7 +27,6 @@ export function shopInfo(chatId: string): ShopInfo {
     phone: p.shop_phone ?? "+91-90000-00000",
     state: p.shop_state ?? "Karnataka (29)",
     brand_color: color,
-    logo_path: logo,
     footer: p.invoice_footer,
     template: p.invoice_template === "modern" ? "modern" : "classic",
   };

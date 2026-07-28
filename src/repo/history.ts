@@ -20,15 +20,6 @@ export function getHistory(chatId: string): ModelMessage[] {
   }
 }
 
-/** Drop image bytes before persisting — the text of the turn is enough context. */
-function slim(m: ModelMessage): ModelMessage {
-  if (m.role !== "user" || !Array.isArray(m.content)) return m;
-  const content = m.content.map((p: any) =>
-    p.type === "image" ? { type: "text" as const, text: "(photo sent)" } : p
-  );
-  return { ...m, content } as ModelMessage;
-}
-
 /**
  * Trim to the last MAX_MESSAGES, then keep dropping from the front until the
  * window starts on a user turn — a tool result whose tool call got trimmed away
@@ -41,7 +32,7 @@ function trim(msgs: ModelMessage[]): ModelMessage[] {
 }
 
 export function setHistory(chatId: string, msgs: ModelMessage[]): void {
-  setPref(chatId, HISTORY_KEY, JSON.stringify(trim(msgs.map(slim))));
+  setPref(chatId, HISTORY_KEY, JSON.stringify(trim(msgs)));
 }
 
 export function clearHistory(chatId: string): void {

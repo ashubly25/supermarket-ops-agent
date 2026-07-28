@@ -9,8 +9,7 @@ function line(p: products.Product): string {
   const tag = p.loose ? " (loose)" : "";
   const expired = batches.expiredQty(p.id);
   const exp = expired > 0 ? `, ${expired} EXPIRED (not sellable)` : "";
-  const code = p.barcode ? `, barcode ${p.barcode}` : "";
-  return `#${p.id} ${p.name} ${p.size}${tag} — stock ${p.qty} ${p.unit}${exp}, sell ${inr(p.sell_price)}, MRP ${inr(p.mrp)}, GST ${p.gst_rate}% (HSN ${p.hsn})${code}`;
+  return `#${p.id} ${p.name} ${p.size}${tag} — stock ${p.qty} ${p.unit}${exp}, sell ${inr(p.sell_price)}, MRP ${inr(p.mrp)}, GST ${p.gst_rate}% (HSN ${p.hsn})`;
 }
 
 function ok(text: string, data?: unknown) {
@@ -66,7 +65,7 @@ export const addProduct = tool(
     size: z.string().describe("Pack size, e.g. '100g', '1L', or 'loose' for by-weight items"),
     unit: z.enum(["kg", "g", "litre", "ml", "packet", "dozen", "piece"]),
     loose: z.boolean().default(false).describe("true if sold loose by weight/volume"),
-    gst_rate: z.number().describe("GST slab %: 0, 5, 12 or 18"),
+    gst_rate: z.number().describe("GST slab %: 0, 5, 18 or 40. The 12% and 28% slabs were abolished on 22 Sep 2025 — never use them."),
     hsn: z.string().default("").describe("HSN code if known"),
     cost_price: z.number().describe("Purchase cost per unit"),
     mrp: z.number().describe("Maximum retail price"),
@@ -154,26 +153,19 @@ export const writeOffExpired = tool(
   }
 );
 
-export const findByBarcode = tool(
-  "find_by_barcode",
-  "Look up a product by its barcode/EAN digits — use when the owner sends a photo of a barcode or types the digits. If nothing matches, fall back to find_product on the visible brand name, then offer to link the barcode with set_barcode.",
-  { barcode: z.string().describe("The barcode digits, e.g. '8901058000221'") },
-  async ({ barcode }) => {
-    const p = products.getByBarcode(barcode);
-    if (!p) return ok(`No product is linked to barcode ${barcode} yet.`, { product: null, barcode });
-    return ok(line(p), { product: p });
-  }
-);
-
-export const setBarcode = tool(
-  "set_barcode",
-  "Link a barcode/EAN to an existing product so future scans resolve instantly. Resolve product_id via find_product first.",
-  { product_id: z.number().int(), barcode: z.string() },
-  async ({ product_id, barcode }) => {
-    if (!products.getById(product_id)) return err(`No product with id ${product_id}.`);
+export const adjustStock = tool(
+  "adjust_stock",
+  "Correct stock against a physical count — breakage, spoilage that isn't an expiry, theft, or a miscount at stock-take. Signed delta (negative to reduce) and a reason are required; the reason goes on the audit trail. Cannot drive stock negative, and never counts as demand in reorder planning. Use for 'two bottles broke', '3 packets missing', 'counted 48 not 50'. NOT for expired stock — that is write_off_expired.",
+  {
+    product_id: z.number().int().describe("products.id from find_product"),
+    delta: z.number().describe("Signed change in the product's unit: -2 for two broken, +3 for three found"),
+    reason: z.string().min(1).describe("Why, in the owner's words: 'broken in transit', 'stock-take correction'"),
+  },
+  async ({ product_id, delta, reason }) => {
     try {
-      const p = products.setBarcode(product_id, barcode);
-      return ok(`Linked barcode ${barcode} → ${p.name} ${p.size}.`, { product: p });
+      const p = products.adjustStock(product_id, delta, reason);
+      const verb = delta < 0 ? "Removed" : "Added";
+      return ok(`${verb} ${Math.abs(delta)} ${p.unit} of ${p.name} (${reason}). Stock now ${p.qty} ${p.unit}.`, { product: p });
     } catch (e) {
       return err((e as Error).message);
     }
@@ -182,5 +174,5 @@ export const setBarcode = tool(
 
 export const inventoryTools = [
   findProduct, getStock, lowStock, addProduct, receiveStock,
-  expiringSoon, writeOffExpired, findByBarcode, setBarcode,
+  expiringSoon, writeOffExpired, adjustStock,
 ];

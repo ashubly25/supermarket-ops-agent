@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS products (
   unit          TEXT NOT NULL,           -- kg|g|litre|ml|packet|dozen|piece
   loose         INTEGER NOT NULL DEFAULT 0,  -- 0 packaged, 1 loose (priced by weight)
   hsn           TEXT NOT NULL DEFAULT '',
-  gst_rate      REAL NOT NULL DEFAULT 0,     -- 0 | 5 | 12 | 18
+  gst_rate      REAL NOT NULL DEFAULT 0,     -- 0 | 5 | 18 | 40  (GST 2.0, from 22 Sep 2025)
   cost_price    REAL NOT NULL DEFAULT 0,     -- per unit (per kg/L for loose)
   mrp           REAL NOT NULL DEFAULT 0,
   sell_price    REAL NOT NULL DEFAULT 0,

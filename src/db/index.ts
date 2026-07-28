@@ -29,10 +29,8 @@ export function migrate(): void {
   db.exec(sql);
 
   // Stretch migrations on pre-existing tables.
-  addColumn("products", "barcode", "TEXT");            // EAN/UPC for scan-to-bill
   addColumn("products", "perishable", "INTEGER NOT NULL DEFAULT 0");
   addColumn("stock_moves", "batch_id", "INTEGER");     // audit: which batch a sale came out of
-  db.exec("CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)");
 }
 
 /**

@@ -212,3 +212,39 @@ export function writeOffExpired(opts: { product_id?: number; batch_id?: number }
     return done;
   });
 }
+
+/**
+ * Put back exactly what a bill took out. Every FEFO consumption journalled the batch
+ * it came from, so a reversal restores the same batches rather than guessing — the
+ * expiry dates on returned stock stay truthful, which is the whole point of FEFO.
+ *
+ * A batch written off in the meantime is NOT resurrected; its quantity is reported
+ * back to the caller so the void can say what could not be restored. MUST run inside
+ * an immediate transaction (voidBill provides one).
+ */
+export function restoreFromBill(billId: number): { restored: number; unrestorable: number } {
+  const moves = db
+    .prepare("SELECT product_id, delta, batch_id FROM stock_moves WHERE ref = ? AND reason = 'sale'")
+    .all(String(billId)) as { product_id: number; delta: number; batch_id: number | null }[];
+
+  let restored = 0;
+  let unrestorable = 0;
+  for (const m of moves) {
+    const qty = round2(-m.delta); // sale deltas are negative
+    if (qty <= 0) continue;
+    const b = m.batch_id
+      ? (db.prepare("SELECT * FROM batches WHERE id = ?").get(m.batch_id) as Batch | undefined)
+      : undefined;
+    if (!b || b.status !== "active") {
+      unrestorable = round2(unrestorable + qty);
+      continue;
+    }
+    db.prepare("UPDATE batches SET qty = qty + ? WHERE id = ?").run(qty, b.id);
+    db.prepare("UPDATE products SET qty = qty + ? WHERE id = ?").run(qty, m.product_id);
+    db.prepare(
+      "INSERT INTO stock_moves (product_id, delta, reason, ref, batch_id) VALUES (?,?, 'void', ?, ?)"
+    ).run(m.product_id, qty, String(billId), b.id);
+    restored = round2(restored + qty);
+  }
+  return { restored, unrestorable };
+}

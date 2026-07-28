@@ -8,9 +8,7 @@ Goal: an always-on Telegram bot with a persistent SQLite file, free forever.
 
 ## 2. Provision the VM (one-time)
 1. Oracle Cloud → **Compute → Instances → Create**.
-2. Shape: **Ampere A1 (ARM)**, 1 OCPU / 6 GB — *Always Free*. Prefer it over
-   `VM.Standard.E2.1.Micro`: the micro's 1 GB RAM OOMs during the image build
-   (`deploy.sh` adds swap to cope, but A1 just works).
+2. Shape:`VM.Standard.E2.1.Micro`: the micro's 1 GB RAM OOMs during the image build(`deploy.sh`).
 3. Image: **Ubuntu 22.04**. Add your SSH key. Create.
 4. SSH in: `ssh ubuntu@<public-ip>`.
 
@@ -33,7 +31,7 @@ that policy, and low-RAM shapes (adds a 2 GB swapfile).
 `restart: always` keeps it up across reboots. The SQLite DB lives in the `store-data`
 Docker volume, so stock / khata / bills / preferences survive restarts and redeploys.
 
-## 5. Update later
+## 4. Update later
 ```bash
 git pull && docker compose up -d --build
 ```

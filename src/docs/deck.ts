@@ -39,13 +39,6 @@ export async function generateDeckPptx(
   s1.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 1.4, fill: { color: BRAND } });
   s1.addText(shop.name, { x: 0.4, y: 0.25, w: 9, h: 0.5, fontSize: 26, bold: true, color: "FFFFFF" });
   s1.addText(`Sales Analysis  ·  ${r.from} → ${r.to}`, { x: 0.4, y: 0.82, w: 9, h: 0.4, fontSize: 14, color: "E5EEFF" });
-  if (shop.logo_path) {
-    try {
-      s1.addImage({ path: shop.logo_path, x: 8.9, y: 0.2, w: 1.0, h: 1.0 });
-    } catch {
-      /* logo unreadable → skip it, deck still renders */
-    }
-  }
 
   const avg = r.bill_count ? r.gross_sales / r.bill_count : 0;
   const kpis: [string, string][] = [

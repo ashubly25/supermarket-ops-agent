@@ -24,11 +24,6 @@ const { runJob, khataDigest } = await import("../src/jobs.ts");
 seed();
 const CHAT = "docs-chat";
 
-// A 1x1 PNG stands in for the owner's logo.
-const logoDir = join(process.env.ARTIFACTS_DIR!, CHAT);
-mkdirSync(logoDir, { recursive: true });
-const logo = join(logoDir, "logo.png");
-writeFileSync(logo, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
 
 // Branding lives in prefs, exactly as the agent's set_preference tool would write it.
 for (const [k, v] of Object.entries({
@@ -40,13 +35,12 @@ for (const [k, v] of Object.entries({
   brand_color: "#0F766E",
   invoice_template: "modern",
   invoice_footer: "Home delivery on orders above ₹500 · UPI: sharma@okaxis",
-  shop_logo: logo,
 })) prefs.setPref(CHAT, k, v);
 
 const shop = shopInfo(CHAT);
-console.log("Branding:", shop.name, shop.template, "#" + shop.brand_color, "logo:", !!shop.logo_path);
+console.log("Branding:", shop.name, shop.template, "#" + shop.brand_color);
 
-// Build a mixed bill: loose sugar (5%), atta (5%), maggi (18%), butter (12%).
+// Build a mixed bill across slabs: loose sugar (5%), atta (5%), maggi (5%), detergent (18%).
 const d = bills.createDraft(CHAT);
 bills.addItem(d.id, products.search("sugar loose", 1)[0].id, 2);
 bills.addItem(d.id, products.search("aashirvaad atta", 1)[0].id, 1);

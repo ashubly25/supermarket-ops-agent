@@ -33,22 +33,14 @@ export function generateInvoicePdf(bill: Bill, items: BillItem[], shop: ShopInfo
     const brand = "#" + shop.brand_color;
     const modern = shop.template === "modern";
 
-    // --- Branded header: optional logo, shop identity, accent band ---
+    // --- Branded header: shop identity, accent band ---
     if (modern) {
       doc.rect(0, 0, 595, 96).fill(brand);
     }
     const headText = modern ? "#FFFFFF" : "#000000";
     const subText = modern ? "#E8EEF9" : "#444444";
 
-    let hx = left; // header text x — shifts right when a logo is present
-    if (shop.logo_path) {
-      try {
-        doc.image(shop.logo_path, left, 34, { fit: [54, 54] });
-        hx = left + 66;
-      } catch {
-        /* unreadable logo → fall back to text-only header */
-      }
-    }
+    const hx = left;
     doc.fontSize(18).font("Helvetica-Bold").fillColor(headText).text(ascii(shop.name), hx, 38);
     doc.fontSize(9).font("Helvetica").fillColor(subText)
       .text(ascii(shop.address), hx, 62, { width: 300 })
@@ -102,19 +94,20 @@ export function generateInvoicePdf(bill: Bill, items: BillItem[], shop: ShopInfo
     y += 8;
 
     // --- Per-slab tax summary ---
-    const bySlab = new Map<number, { taxable: number; tax: number }>();
+    const bySlab = new Map<number, { taxable: number; cgst: number; sgst: number }>();
     for (const it of items) {
-      const s = bySlab.get(it.gst_rate) ?? { taxable: 0, tax: 0 };
+      const s = bySlab.get(it.gst_rate) ?? { taxable: 0, cgst: 0, sgst: 0 };
+      const lineHalf = round2(it.line_tax / 2);
       s.taxable = round2(s.taxable + it.taxable);
-      s.tax = round2(s.tax + it.line_tax);
+      s.cgst = round2(s.cgst + lineHalf);
+      s.sgst = round2(s.sgst + (it.line_tax - lineHalf));
       bySlab.set(it.gst_rate, s);
     }
     doc.fontSize(8).font("Helvetica-Bold").text("GST Summary", left, y);
     y += 14;
     doc.font("Helvetica");
     for (const [rate, s] of [...bySlab.entries()].sort((a, b) => a[0] - b[0])) {
-      const half = round2(s.tax / 2);
-      doc.text(`${rate}% on ${R(s.taxable)}  =  CGST ${R(half)} + SGST ${R(round2(s.tax - half))}`, left, y);
+      doc.text(`${rate}% on ${R(s.taxable)}  =  CGST ${R(s.cgst)} + SGST ${R(s.sgst)}`, left, y);
       y += 13;
     }
 

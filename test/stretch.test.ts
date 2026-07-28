@@ -193,12 +193,3 @@ test("notices queue and drain once", () => {
   assert.ok(!schedules.chatsWithPending().includes("chatN"));
 });
 
-// ─────────────────────── Barcode ───────────────────────
-
-test("barcode links a SKU and refuses being attached to two products", () => {
-  const a = mkProduct("Barcode A");
-  const b = mkProduct("Barcode B");
-  products.setBarcode(a.id, "8901058000221");
-  assert.equal(products.getByBarcode("8901058000221")!.id, a.id);
-  assert.throws(() => products.setBarcode(b.id, "8901058000221"), /already on/);
-});

@@ -11,10 +11,10 @@ const products = await import("../src/repo/products.ts");
 
 seed();
 
-test("seed loads 18 real SKUs with valid GST slabs", () => {
+test("seed loads 19 real SKUs with valid GST slabs", () => {
   const all = products.search("", 100);
-  assert.equal(all.length >= 18, true);
-  for (const p of all) assert.ok([0, 5, 12, 18].includes(p.gst_rate), `bad slab ${p.gst_rate}`);
+  assert.equal(all.length >= 19, true);
+  for (const p of all) assert.ok([0, 5, 18, 40].includes(p.gst_rate), `bad slab ${p.gst_rate}`);
 });
 
 test("fuzzy 'atta' is ambiguous (>=2 candidates) → agent must disambiguate", () => {
@@ -37,3 +37,4 @@ test("low_stock lists items at/below reorder level", () => {
   for (const item of low) assert.ok(item.qty <= item.reorder_level);
   void p;
 });
+

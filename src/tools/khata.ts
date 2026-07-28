@@ -33,7 +33,7 @@ export const khataCharge = tool(
 
 export const khataPayment = tool(
   "khata_payment",
-  "Record a payment a customer made against their khata (reduces what they owe). Refuses if the customer has no khata, or if the payment exceeds their balance. Use for 'Ramesh paid ₹300'.",
+  "Record a payment a customer made against their khata (reduces what they owe). Paying MORE than the balance is allowed and leaves an advance the shop owes back — say so plainly when it happens. Refuses only if the customer has no khata. Use for 'Ramesh paid ₹300'.",
   {
     customer: z.string(),
     amount: z.number().positive(),
@@ -43,9 +43,11 @@ export const khataPayment = tool(
     try {
       const c = khata.payment(customer, amount, note);
       const msg =
-        c.khata_balance <= 1e-6
-          ? `${c.name} paid ${inr(amount)}. Khata cleared — balance ₹0.00.`
-          : `${c.name} paid ${inr(amount)}. Balance now ${inr(c.khata_balance)}.`;
+        c.khata_balance < -1e-6
+          ? `${c.name} paid ${inr(amount)}. Khata cleared, and ${inr(-c.khata_balance)} is left over as an advance you owe them.`
+          : Math.abs(c.khata_balance) <= 1e-6
+            ? `${c.name} paid ${inr(amount)}. Khata cleared — balance ₹0.00.`
+            : `${c.name} paid ${inr(amount)}. Balance now ${inr(c.khata_balance)}.`;
       return ok(msg, { customer: c });
     } catch (e) {
       return err((e as Error).message);

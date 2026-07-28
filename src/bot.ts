@@ -1,11 +1,8 @@
 import { Bot, InputFile } from "grammy";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { extname, join } from "node:path";
-import { requireEnv, ARTIFACTS_DIR } from "./config.js";
+import { requireEnv } from "./config.js";
 import { runAgent, resetSession } from "./agent.js";
 import { markProcessed, takeOutbox, markSent } from "./repo/updates.js";
 import { takeNotices, markNoticeSent, chatsWithPending } from "./repo/schedules.js";
-import { setPref } from "./repo/prefs.js";
 
 export function buildBot(): Bot {
   const token = requireEnv("TELEGRAM_BOT_TOKEN");
@@ -21,7 +18,7 @@ export function buildBot(): Bot {
         "• put ₹500 on Ramesh's credit\n" +
         "• today's sales / send me a PDF invoice / weekly analysis deck\n" +
         "• what's expiring? / what should I order? / who owes me?\n" +
-        "• send me the deck every Monday 9am · send a barcode or logo photo\n\n" +
+        "• send me the deck every Monday 9am\n\n" +
         "/new starts a fresh conversation (your store data & preferences stay)."
     )
   );
@@ -43,33 +40,14 @@ export function buildBot(): Bot {
     await handleTurn(bot, ctx, chatId, text);
   });
 
-  // Photos: barcode scan, product identification, or the shop logo. The model
-  // sees the image itself and decides — no OCR/classifier branch here.
-  bot.on("message:photo", async (ctx) => {
-    if (!markProcessed(ctx.update.update_id)) return;
-    const chatId = String(ctx.chat.id);
-    await ctx.replyWithChatAction("typing").catch(() => {});
-    let path: string;
-    try {
-      path = await downloadPhoto(bot, token, ctx, chatId);
-    } catch (e) {
-      console.error("photo download failed:", e);
-      await ctx.reply("⚠️ Couldn't download that photo. Try sending it again.");
-      return;
-    }
-    // Remembered so set_shop_logo can pick up "make this my logo" on a later turn.
-    setPref(chatId, "__last_photo", path);
-    await handleTurn(bot, ctx, chatId, ctx.message.caption ?? "", path);
-  });
-
   bot.catch((err) => console.error("bot error:", err.error));
   return bot;
 }
 
-async function handleTurn(bot: Bot, ctx: any, chatId: string, text: string, imagePath?: string): Promise<void> {
+async function handleTurn(bot: Bot, ctx: any, chatId: string, text: string): Promise<void> {
   await ctx.replyWithChatAction("typing").catch(() => {});
   try {
-    const { text: reply } = await runAgent(chatId, text, imagePath);
+    const { text: reply } = await runAgent(chatId, text);
     await ctx.reply(reply, { link_preview_options: { is_disabled: true } });
     await flushChat(bot, chatId);
   } catch (e) {
@@ -83,19 +61,6 @@ async function handleTurn(bot: Bot, ctx: any, chatId: string, text: string, imag
         : "⚠️ Something went wrong handling that. Please try again."
     );
   }
-}
-
-/** Fetch the largest rendition of a Telegram photo to disk. */
-async function downloadPhoto(bot: Bot, token: string, ctx: any, chatId: string): Promise<string> {
-  const photo = ctx.message.photo[ctx.message.photo.length - 1];
-  const file = await bot.api.getFile(photo.file_id);
-  const res = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`);
-  if (!res.ok) throw new Error(`telegram file fetch ${res.status}`);
-  const dir = join(ARTIFACTS_DIR, chatId, "incoming");
-  mkdirSync(dir, { recursive: true });
-  const path = join(dir, `${photo.file_unique_id}${extname(file.file_path ?? "") || ".jpg"}`);
-  writeFileSync(path, Buffer.from(await res.arrayBuffer()));
-  return path;
 }
 
 /** Send anything queued for a chat: scheduler notices, then generated files. */
