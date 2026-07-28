@@ -90,7 +90,7 @@ on this bill).
 > Say: "That refusal comes from the tool, not the prompt — it can't be talked out of it.
 > Note it also subtracts what this open draft already claims."
 
-Then finalize:
+Then finalize — use both words, it's the deterministic phrasing:
 
 ```
 cash, finalize
