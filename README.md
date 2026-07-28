@@ -117,6 +117,23 @@ Both require a reason on the audit trail, and both skills instruct the agent to 
 | **Multi-language (Hindi / Tamil)** | A `language` preference steers replies (own script, everyday shop vocabulary); the model understands any input language regardless. Invoices and decks stay English — they're legal documents. Persists across `/new` like every other preference. |
 | **Khata reminders** | `khata_reminders` lists customers who owe and haven't paid in N+ days (staleness measured from their last payment, or oldest charge if never). `draft_khata_reminder` writes a message the owner forwards — **the bot never messages customers itself**, and says so. Schedulable as a weekly digest. |
 
+## Who can operate the store
+
+One shop, one set of books: `products`, `batches`, `stock_moves` and `customers` are **global**, while
+`bills`, `khata_txns` and `prefs` are keyed by chat. That's deliberate — the owner may chat from a phone
+and a desktop and must see the same stock — but it means **any Telegram user who finds the bot can move
+that stock** unless you say otherwise.
+
+So access is explicit, via `OWNER_CHAT_IDS`:
+
+| `OWNER_CHAT_IDS` | Behaviour |
+|---|---|
+| unset (default) | **Open** — anyone can operate the store. Correct while reviewers are driving it, and it means a fresh deploy is never mysteriously mute. |
+| `123,456` | Only those chats; everyone else is refused before any handler runs. |
+
+Send `/whoami` to get your chat id. The boot log states which mode it's in, so an operator can't be
+wrong about it by accident.
+
 ## Run locally
 
 ```bash
@@ -124,7 +141,7 @@ cp .env.example .env      # TELEGRAM_BOT_TOKEN + one of ANTHROPIC_API_KEY / OPEN
 npm install
 npm run seed              # load 19 real SKUs (idempotent)
 npm run dev               # long-poll bot
-npm test                  # 46 tests: GST, oversell, idempotency, concurrency, khata, memory,
+npm test                  # 54 tests: GST, oversell, idempotency, concurrency, khata, memory,
                           #           FEFO, expiry write-off, velocity, scheduling
 node --import tsx test/docs.smoke.ts   # renders a branded PDF + deck, runs the scheduler jobs
 ```

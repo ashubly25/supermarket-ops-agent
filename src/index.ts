@@ -3,10 +3,12 @@ import { buildBot, flushPending } from "./bot.js";
 import { tick } from "./jobs.js";
 
 import { requireModelKey, MODEL_LABEL } from "./config.js";
+import { accessLabel } from "./lib/access.js";
 
 requireModelKey();
 const bot = buildBot();
 console.log(`Supermarket Ops Agent starting (long-poll)… model: ${MODEL_LABEL}`);
+console.log(accessLabel());
 
 // Scheduler: one tick a minute. Jobs claim their slot atomically, so a restart
 // (or a slow job) can never double-send a deck or a reminder.

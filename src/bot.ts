@@ -2,12 +2,24 @@ import { Bot, InputFile } from "grammy";
 import { requireEnv } from "./config.js";
 import { runAgent, resetSession } from "./agent.js";
 import { toPlainText } from "./lib/plain.js";
+import { isAllowed } from "./lib/access.js";
 import { markProcessed, takeOutbox, markSent } from "./repo/updates.js";
 import { takeNotices, markNoticeSent, chatsWithPending } from "./repo/schedules.js";
 
 export function buildBot(): Bot {
   const token = requireEnv("TELEGRAM_BOT_TOKEN");
   const bot = new Bot(token);
+
+  // Gate before any handler: the store's stock, catalogue and customers are shared, so an
+  // uninvited chat could otherwise bill the owner's stock or charge their customers.
+  bot.use(async (ctx, next) => {
+    const chatId = ctx.chat?.id;
+    if (chatId === undefined || isAllowed(String(chatId))) return next();
+    console.log(`[${chatId}] refused — not in OWNER_CHAT_IDS`);
+    await ctx.reply("This bot runs one specific shop's books, and this chat isn't authorised for it.").catch(() => {});
+  });
+
+  bot.command("whoami", (ctx) => ctx.reply(`This chat id is ${ctx.chat.id}.`));
 
   bot.command("start", (ctx) =>
     ctx.reply(
@@ -42,7 +54,7 @@ export function buildBot(): Bot {
     if (/^\/\S/.test(text)) {
       console.log(`[${chatId}] unknown command: ${text.split(/\s/)[0]}`);
       await ctx.reply(
-        `I don't have a ${text.split(/\s/)[0]} command. Only /start and /new — everything else is plain English:\n` +
+        `I don't have a ${text.split(/\s/)[0]} command. Only /start, /new and /whoami — everything else is plain English:\n` +
           "• how much sugar is left?\n" +
           "• make a bill: 2kg sugar, 4 maggi, UPI\n" +
           "• what's expiring? / who owes me?"
