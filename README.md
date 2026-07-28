@@ -130,7 +130,6 @@ node --import tsx test/docs.smoke.ts   # renders a branded PDF + deck, runs the 
 ```
 
 Deploy (Oracle Cloud Always Free, always-on, persistent SQLite): see **`DEPLOY.md`**.
-Walkthrough script for the recording: see **`RECORDING.md`**.
 Full design rationale and data model: see **`PLAN.md`**.
 
 ## Try it (the §3 scenarios)

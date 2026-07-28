@@ -36,9 +36,29 @@ export function buildBot(): Bot {
 
     const chatId = String(ctx.chat.id);
     const text = ctx.message.text;
-    if (text.startsWith("/")) return; // other slash commands handled above
+
+    // An unknown slash command must never be silent: the update is already marked
+    // processed, so a re-send would be dropped too and the owner sees nothing at all.
+    if (/^\/\S/.test(text)) {
+      console.log(`[${chatId}] unknown command: ${text.split(/\s/)[0]}`);
+      await ctx.reply(
+        `I don't have a ${text.split(/\s/)[0]} command. Only /start and /new — everything else is plain English:\n` +
+          "• how much sugar is left?\n" +
+          "• make a bill: 2kg sugar, 4 maggi, UPI\n" +
+          "• what's expiring? / who owes me?"
+      );
+      return;
+    }
 
     await handleTurn(bot, ctx, chatId, text);
+  });
+
+  // Anything that isn't text has no handler now that the photo path is gone. Say so
+  // rather than swallowing the message.
+  bot.on(["message:photo", "message:voice", "message:audio", "message:document", "message:sticker", "message:video"], async (ctx) => {
+    if (!markProcessed(ctx.update.update_id)) return;
+    console.log(`[${ctx.chat.id}] non-text message ignored`);
+    await ctx.reply("I can only read text right now — tell me in words what you need.");
   });
 
   bot.catch((err) => console.error("bot error:", err.error));
@@ -47,8 +67,11 @@ export function buildBot(): Bot {
 
 async function handleTurn(bot: Bot, ctx: any, chatId: string, text: string): Promise<void> {
   await ctx.replyWithChatAction("typing").catch(() => {});
+  const started = Date.now();
   try {
+    console.log(`[${chatId}] → ${text.slice(0, 80)}`);
     const { text: reply } = await runAgent(chatId, text);
+    console.log(`[${chatId}] ← replied in ${Date.now() - started}ms`);
     // Telegram gets no parse_mode, so markdown would render literally. Normalise at the exit.
     await ctx.reply(toPlainText(reply), { link_preview_options: { is_disabled: true } });
     await flushChat(bot, chatId);
