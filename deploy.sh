@@ -10,8 +10,19 @@ cd "$(dirname "$0")"
 if ! command -v docker >/dev/null 2>&1; then
   echo "==> Installing Docker & git…"
   if command -v apt-get >/dev/null 2>&1; then
+    # Ubuntu's own repos carry docker.io but NOT docker-compose-plugin (compose v2),
+    # so pull both from Docker's official repo instead of mixing sources.
     sudo apt-get update -y
-    sudo apt-get install -y docker.io docker-compose-plugin git
+    sudo apt-get install -y ca-certificates curl gnupg git
+    sudo install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg |
+      sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
+    sudo chmod a+r /etc/apt/keyrings/docker.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" |
+      sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+    sudo apt-get update -y
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
   elif command -v dnf >/dev/null 2>&1; then
     # Oracle Linux images ship podman-docker, which shadows the real docker CLI.
     sudo dnf remove -y podman-docker runc >/dev/null 2>&1 || true
