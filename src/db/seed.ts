@@ -16,14 +16,17 @@ type Seed = {
   barcode?: string;
   /** Days from today this stock expires — seeds a dated batch for FEFO demos. */
   expires_in?: number;
+  /** Short shelf life → the agent asks for a date on stock-in. Long-life packaged
+   *  goods still carry an expiry batch, but shouldn't trigger that question. */
+  perishable?: number;
 };
 
 const SKUS: Seed[] = [
   // --- 0% staples ---
   { name: "Aashirvaad Atta", size: "5kg", unit: "packet", loose: 0, hsn: "1101", gst: 5, cost: 245, mrp: 285, sell: 275, qty: 30, reorder: 8, barcode: "8901725111212" },
   { name: "Tata Salt", size: "1kg", unit: "packet", loose: 0, hsn: "2501", gst: 0, cost: 22, mrp: 28, sell: 26, qty: 60, reorder: 15, barcode: "8901725100018" },
-  { name: "Amul Taaza Milk", size: "500ml", unit: "packet", loose: 0, hsn: "0401", gst: 0, cost: 25, mrp: 28, sell: 27, qty: 40, reorder: 20, barcode: "8901262010023", expires_in: 3 },
-  { name: "Britannia Bread", size: "400g", unit: "packet", loose: 0, hsn: "1905", gst: 0, cost: 40, mrp: 50, sell: 48, qty: 20, reorder: 10, barcode: "8901063011007", expires_in: 2 },
+  { name: "Amul Taaza Milk", size: "500ml", unit: "packet", loose: 0, hsn: "0401", gst: 0, cost: 25, mrp: 28, sell: 27, qty: 40, reorder: 20, barcode: "8901262010023", expires_in: 3, perishable: 1 },
+  { name: "Britannia Bread", size: "400g", unit: "packet", loose: 0, hsn: "1905", gst: 0, cost: 40, mrp: 50, sell: 48, qty: 20, reorder: 10, barcode: "8901063011007", expires_in: 2, perishable: 1 },
   // --- loose (0% unbranded) ---
   { name: "Sugar (loose)", size: "loose", unit: "kg", loose: 1, hsn: "1701", gst: 5, cost: 40, mrp: 48, sell: 46, qty: 50, reorder: 10 },
   { name: "Rice Sona Masoori (loose)", size: "loose", unit: "kg", loose: 1, hsn: "1006", gst: 0, cost: 52, mrp: 65, sell: 62, qty: 80, reorder: 20 },
@@ -33,7 +36,7 @@ const SKUS: Seed[] = [
   { name: "Fortune Sunflower Oil", size: "1L", unit: "packet", loose: 0, hsn: "1512", gst: 5, cost: 130, mrp: 155, sell: 149, qty: 25, reorder: 8 },
   { name: "Tata Tea Gold", size: "500g", unit: "packet", loose: 0, hsn: "0902", gst: 5, cost: 240, mrp: 290, sell: 275, qty: 18, reorder: 6 },
   // --- 12% ---
-  { name: "Amul Butter", size: "100g", unit: "packet", loose: 0, hsn: "0405", gst: 12, cost: 52, mrp: 62, sell: 60, qty: 35, reorder: 10, barcode: "8901262260015", expires_in: 45 },
+  { name: "Amul Butter", size: "100g", unit: "packet", loose: 0, hsn: "0405", gst: 12, cost: 52, mrp: 62, sell: 60, qty: 35, reorder: 10, barcode: "8901262260015", expires_in: 45, perishable: 1 },
   { name: "Haldiram Aloo Bhujia", size: "200g", unit: "packet", loose: 0, hsn: "2106", gst: 12, cost: 45, mrp: 55, sell: 52, qty: 22, reorder: 8, barcode: "8904063200015", expires_in: 20 },
   // --- 18% ---
   { name: "Maggi Masala Noodles", size: "70g", unit: "packet", loose: 0, hsn: "1902", gst: 18, cost: 12, mrp: 14, sell: 14, qty: 100, reorder: 25, barcode: "8901058000221", expires_in: 180 },
@@ -66,7 +69,7 @@ export function seed(): number {
       const info = insert.run({
         ...r,
         barcode: r.barcode ?? null,
-        perishable: r.expires_in != null ? 1 : 0,
+        perishable: r.perishable ?? 0,
       });
       if (info.changes === 0) continue; // already seeded
       n += 1;

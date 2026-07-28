@@ -41,9 +41,17 @@ export function remove(chatId: string, kind: string): boolean {
   return db.prepare("DELETE FROM schedules WHERE chat_id=? AND kind=?").run(chatId, kind).changes > 0;
 }
 
-/** Slot key for a fire — one per schedule per calendar day. */
+/**
+ * Slot key for a fire — one per schedule per LOCAL calendar day. It must use the
+ * local date, not the UTC one: `due()` matches on local hour/weekday, so a UTC
+ * date here would roll over mid-local-day in any non-UTC zone (e.g. a 02:00
+ * schedule in IST) and let the same slot fire twice.
+ */
+const localDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 const slotKey = (now: Date, s: Schedule) =>
-  `${now.toISOString().slice(0, 10)}T${String(s.hour).padStart(2, "0")}:${String(s.minute).padStart(2, "0")}`;
+  `${localDate(now)}T${String(s.hour).padStart(2, "0")}:${String(s.minute).padStart(2, "0")}`;
 
 /** Schedules whose time has arrived today and that haven't fired for that slot yet. */
 export function due(now = new Date()): Schedule[] {

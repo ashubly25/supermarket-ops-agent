@@ -74,7 +74,14 @@ async function handleTurn(bot: Bot, ctx: any, chatId: string, text: string, imag
     await flushChat(bot, chatId);
   } catch (e) {
     console.error("agent error:", e);
-    await ctx.reply("⚠️ Something went wrong handling that. Please try again.");
+    // A rate-limited turn is worth retrying verbatim; anything else isn't.
+    const msg = String((e as Error)?.message ?? e);
+    const rateLimited = /rate.?limit|429|quota/i.test(msg);
+    await ctx.reply(
+      rateLimited
+        ? "⏳ The model is rate-limited right now. Send that again in a few seconds — nothing was saved."
+        : "⚠️ Something went wrong handling that. Please try again."
+    );
   }
 }
 

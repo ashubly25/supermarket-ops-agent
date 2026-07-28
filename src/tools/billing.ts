@@ -1,4 +1,4 @@
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { tool } from "../lib/tool.js";
 import { z } from "zod";
 import * as bills from "../repo/bills.js";
 import { inr, round2 } from "../lib/money.js";

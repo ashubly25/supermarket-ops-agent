@@ -159,6 +159,20 @@ test("a due schedule fires once per slot, even if the tick repeats", () => {
   assert.ok(!schedules.due(now).some((x) => x.id === s.id), "no longer due once claimed");
 });
 
+test("a claimed slot stays claimed across the UTC date rollover", () => {
+  // In UTC+X the UTC date flips mid-local-day. A UTC-keyed slot would re-fire.
+  const s = schedules.upsert({ chat_id: "chatTZ", kind: "daily_close", weekday: null, hour: 2, minute: 0, enabled: 1 });
+  const early = new Date();
+  early.setHours(2, 30, 0, 0);
+  const later = new Date(early);
+  later.setHours(6, 0, 0, 0); // same local day, possibly a different UTC day
+
+  assert.equal(schedules.claim(s, early), true);
+  const after = schedules.list("chatTZ").find((x) => x.id === s.id)!;
+  assert.equal(schedules.claim(after, later), false, "same local day → still the same slot");
+  assert.ok(!schedules.due(later).some((x) => x.id === s.id));
+});
+
 test("schedules respect weekday and paused state", () => {
   const now = new Date();
   now.setHours(23, 0, 0, 0);

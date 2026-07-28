@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Conversational agent that runs an Indian kirana store from Telegram. Claude Agent SDK.",
+  "description": "Conversational agent that runs an Indian kirana store from Telegram. Vercel AI SDK + Anthropic.",
   "scripts": {
     "build": "tsc -p tsconfig.json && mkdir -p dist/db && cp src/db/schema.sql dist/db/schema.sql",
     "start": "node dist/index.js",
@@ -12,7 +12,7 @@
     "test": "node --import tsx --test test/**/*.test.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "ai": "^7.0.38",
     "better-sqlite3": "^11.8.1",
     "grammy": "^1.30.0",
     "pdfkit": "^0.15.1",

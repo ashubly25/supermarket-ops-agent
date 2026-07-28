@@ -22,7 +22,7 @@ sudo usermod -aG docker $USER && newgrp docker
 ```bash
 git clone <your-repo> supermarket-ops-agent && cd supermarket-ops-agent
 cp .env.example .env
-nano .env         # set TELEGRAM_BOT_TOKEN and ANTHROPIC_API_KEY
+nano .env         # set TELEGRAM_BOT_TOKEN and AI_GATEWAY_API_KEY
 docker compose up -d --build
 docker compose logs -f          # expect: "Bot online as @<username>"
 ```

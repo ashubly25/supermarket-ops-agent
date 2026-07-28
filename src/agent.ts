@@ -1,6 +1,9 @@
-import { query, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
-import { MODEL, PROJECT_CWD } from "./config.js";
-import { getPrefs, getPref, setPref, deletePref } from "./repo/prefs.js";
+import { generateText, stepCountIs, type LanguageModel, type ModelMessage } from "ai";
+import { MODEL } from "./config.js";
+import { getPrefs } from "./repo/prefs.js";
+import { getHistory, setHistory, clearHistory } from "./repo/history.js";
+import { toolset } from "./lib/tool.js";
+import { skillIndex, readSkillTool } from "./lib/skills.js";
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { inventoryTools } from "./tools/inventory.js";
@@ -12,15 +15,13 @@ import { makePrefTools } from "./tools/prefs.js";
 import { makeScheduleTools } from "./tools/schedules.js";
 import { language } from "./lib/shop.js";
 
-const SESSION_KEY = "__session_id";
-
 /**
  * Build the store's tool surface for ONE chat. Chat-scoped tools (billing) capture
  * chatId in a closure, so the model never has to pass plumbing like chat_id — and
  * concurrent chats can't cross-contaminate their draft bills.
  */
 function buildTools(chatId: string) {
-  const tools = [
+  return toolset([
     ...inventoryTools,
     ...makeBillingTools({ chatId }),
     ...makeKhataTools({ chatId }),
@@ -28,10 +29,8 @@ function buildTools(chatId: string) {
     ...makeDocumentTools({ chatId }),
     ...makePrefTools({ chatId }),
     ...makeScheduleTools({ chatId }),
-  ];
-  const server = createSdkMcpServer({ name: "store", version: "1.0.0", tools });
-  const allowed = tools.map((t) => `mcp__store__${t.name}`);
-  return { server, allowed };
+    readSkillTool,
+  ]);
 }
 
 function systemPrompt(chatId: string): string {
@@ -58,7 +57,7 @@ BILLING FLOW
 STOCK, EXPIRY & FEFO
 - Stock is held in batches. Sales consume First-Expiry-First-Out automatically at finalize — you never pick batches by hand.
 - Expired stock is NOT sellable: the tools exclude it. If a sale is refused because of it, tell the owner to write it off (write_off_expired) — and confirm before writing anything off.
-- On receive_stock for a perishable (milk, curd, bread, eggs, paneer), ask for the expiry date if the owner didn't say one.
+- Receive stock immediately; do not hold it up for an expiry date. Only for SHORT-shelf-life goods (milk, curd, paneer, bread, eggs) ask for the date — and only if the owner didn't state one. For everything else record it without an expiry and move on (mention they can add one later).
 - For purchase planning prefer reorder_suggestions (sales velocity) over low_stock (static level).
 
 PHOTOS
@@ -75,75 +74,58 @@ LANGUAGE
 - Reply in: ${language(chatId)}. If that is hindi or tamil, write in that language's own script (Devanagari / தமிழ்) using everyday shop vocabulary; keep numbers, ₹ amounts, GST%, product brand names and tool arguments as-is. Invoices and decks stay in English (legal documents).
 - The owner may write in any language; understand it regardless.
 
+SKILLS (playbooks — call read_skill with the name before doing that kind of work; they hold the detail this prompt omits):
+${skillIndex()}
+
 OWNER PREFERENCES (remembered across chats — apply them unless the owner overrides in-message):
 ${prefLines}`;
 }
 
 export interface AgentResult {
   text: string;
-  sessionId?: string;
+  steps: number;
 }
 
 const MEDIA: Record<string, string> = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp" };
 
-/** Single-message streaming input, so a photo can ride along with the text. */
-async function* imagePrompt(text: string, imagePath: string, sessionId: string) {
-  const media = MEDIA[extname(imagePath).toLowerCase()] ?? "image/jpeg";
-  yield {
-    type: "user" as const,
-    session_id: sessionId,
-    parent_tool_use_id: null,
-    message: {
-      role: "user" as const,
-      content: [
-        { type: "image" as const, source: { type: "base64" as const, media_type: media as any, data: readFileSync(imagePath).toString("base64") } },
-        { type: "text" as const, text: text || "(photo, no caption)" },
-      ],
-    },
+/** The owner's turn — a photo (barcode / product pack / shop logo) rides along with the text. */
+function userMessage(text: string, imagePath?: string): ModelMessage {
+  if (!imagePath) return { role: "user", content: text };
+  return {
+    role: "user",
+    content: [
+      { type: "image", image: readFileSync(imagePath), mediaType: MEDIA[extname(imagePath).toLowerCase()] ?? "image/jpeg" },
+      { type: "text", text: text || "(photo, no caption)" },
+    ],
   };
 }
 
 /**
- * Run one owner message through the agent. Resumes the chat's prior session so
- * multi-turn bills keep context. Returns the final assistant text.
- * `imagePath` attaches a photo (barcode / product pack / shop logo) to the turn.
+ * Run one owner message through the agent. Replays the chat's stored history so
+ * multi-turn bills keep context, then persists the turn. Returns the final text.
  */
-export async function runAgent(chatId: string, message: string, imagePath?: string): Promise<AgentResult> {
-  const resume = getPref(chatId, SESSION_KEY);
-  let sessionId: string | undefined = resume;
-  let finalText = "";
+export async function runAgent(
+  chatId: string,
+  message: string,
+  imagePath?: string,
+  model: LanguageModel = MODEL // a bare "provider/model" string routes via the AI Gateway; overridable so tests can drive the loop offline
+): Promise<AgentResult> {
+  const history = getHistory(chatId);
+  const messages: ModelMessage[] = [...history, userMessage(message, imagePath)];
 
-  const { server, allowed } = buildTools(chatId);
-
-  const stream = query({
-    prompt: imagePath ? imagePrompt(message, imagePath, resume ?? "") : message,
-    options: {
-      model: MODEL,
-      systemPrompt: systemPrompt(chatId),
-      mcpServers: { store: server },
-      allowedTools: allowed,
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true, // trusted server context, no interactive prompts
-      maxTurns: 16,
-      cwd: PROJECT_CWD,
-      // Load the store's Skills (playbooks) from .claude/skills/.
-      settingSources: ["project"],
-      ...(resume ? { resume } : {}),
-    },
+  const result = await generateText({
+    model,
+    system: systemPrompt(chatId),
+    messages,
+    tools: buildTools(chatId),
+    stopWhen: stepCountIs(16),
   });
 
-  for await (const msg of stream as AsyncIterable<any>) {
-    if (msg.session_id) sessionId = msg.session_id;
-    if (msg.type === "result" && msg.subtype === "success") {
-      finalText = msg.result ?? finalText;
-    }
-  }
-
-  if (sessionId && sessionId !== resume) setPref(chatId, SESSION_KEY, sessionId);
-  return { text: finalText || "(no response)", sessionId };
+  setHistory(chatId, [...messages, ...result.response.messages]);
+  return { text: result.text.trim() || "(no response)", steps: result.steps.length };
 }
 
-/** /new — forget the conversation session for this chat. Durable store data is untouched. */
+/** /new — forget the conversation for this chat. Durable store data is untouched. */
 export function resetSession(chatId: string): void {
-  deletePref(chatId, SESSION_KEY);
+  clearHistory(chatId);
 }

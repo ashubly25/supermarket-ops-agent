@@ -1,4 +1,4 @@
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { tool } from "../lib/tool.js";
 import { z } from "zod";
 import * as products from "../repo/products.js";
 import * as batches from "../repo/batches.js";

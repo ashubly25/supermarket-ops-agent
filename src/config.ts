@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 
-export const MODEL = process.env.MODEL ?? "claude-sonnet-5";
+// Routed through the Vercel AI Gateway, so the id is "<provider>/<model>".
+export const MODEL = process.env.MODEL ?? "anthropic/claude-sonnet-5";
 export const ARTIFACTS_DIR = resolve(process.env.ARTIFACTS_DIR ?? "./artifacts");
 export const PROJECT_CWD = resolve(".");
 

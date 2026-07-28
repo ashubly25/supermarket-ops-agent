@@ -2,18 +2,19 @@
 
 Run an Indian kirana / supermarket store end-to-end from a Telegram chat — receive stock, cut GST-correct bills, run khata (credit), close the day, and generate PDF invoices & PPTX analysis decks. The chat is the product; there is no web app or menu.
 
-**Live bot:** `@<your_bot_handle>` &nbsp;·&nbsp; **Harness:** Claude Agent SDK (TypeScript) &nbsp;·&nbsp; **Store:** SQLite
+**Live bot:** [`@zwigato_store_bot`](https://t.me/zwigato_store_bot) &nbsp;·&nbsp; **Harness:** Vercel AI SDK + Anthropic (TypeScript) &nbsp;·&nbsp; **Store:** SQLite
 
-> Set the handle after deploy (see `DEPLOY.md`). Bot token & `ANTHROPIC_API_KEY` go in `.env`.
+> Message it on Telegram and drive the §3 scenarios yourself. Deployment notes: `DEPLOY.md`.
 
 ---
 
-## Why the Claude Agent SDK (TS)
+## Why the Vercel AI SDK (TS)
 
-- `query()` **runs the agent loop for us** — observe → reason → call tool → feed result back → continue, chaining multiple tool calls in a single turn. There is **no intent router / regex**; the model orchestrates. (A keyword router would be an automatic fail per the brief.)
-- Custom tools via `tool()` + `createSdkMcpServer()` run **in-process** — same Node runtime as SQLite and the Telegram client — so every business rule (oversell, GST, idempotency) is enforced in code **where the data changes**, not hoped for in a prompt.
+- `generateText({ tools, stopWhen: stepCountIs(16) })` **runs the agent loop for us** — observe → reason → call tool → feed result back → continue, chaining multiple tool calls in a single turn. There is **no intent router / regex**; the model orchestrates. (A keyword router would be an automatic fail per the brief.)
+- Tools are plain functions defined with `tool()` and run **in-process** — same Node runtime as SQLite and the Telegram client — so every business rule (oversell, GST, idempotency) is enforced in code **where the data changes**, not hoped for in a prompt.
 - **Zod** schemas type and validate every tool input; the model retries on mismatch.
-- Native **Agent Skills** (`.claude/skills/*/SKILL.md`) are the model-facing playbooks; **per-chat session `resume`** gives multi-turn bill state for free.
+- The SDK is provider-agnostic and the model id is a plain `"<provider>/<model>"` string routed through the **AI Gateway** (`AI_GATEWAY_API_KEY`), so switching provider is an env-var change, not a code change. `runAgent` also takes a `model` override, which is how `test/agent.test.ts` drives the real loop offline against a mock model.
+- **Skills** (`.claude/skills/*/SKILL.md`) are the model-facing playbooks, loaded by `src/lib/skills.ts`: the system prompt carries only the one-line index and the model pulls a full playbook with `read_skill` (progressive disclosure).
 - TS pairs with the best doc libraries: `grammY`, `pdfkit`, `pptxgenjs`, `better-sqlite3`.
 
 ## Control loop
@@ -21,16 +22,16 @@ Run an Indian kirana / supermarket store end-to-end from a Telegram chat — rec
 ```
 Telegram (grammY long-poll)
   → drop redelivered update_id (ingress idempotency)
-  → runAgent(chatId, text): query({ resume: "session for this chat", mcpServers, systemPrompt })
-      → SDK loop: reason → tool_use → in-process tool → SQLite (WAL, IMMEDIATE txns) → result → repeat
+  → runAgent(chatId, text): generateText({ messages: stored history, tools, system })
+      → SDK loop: reason → tool call → in-process tool → SQLite (WAL, IMMEDIATE txns) → result → repeat
   → send final text; flush any generated files (PDF/PPTX) from the DB outbox via sendDocument
 ```
 
-One chat = one resumed session (conversation memory). **Durable state is in SQLite, never in the session**, so `/new` clears the chat but the store still knows stock, khata, bills and the owner's preferences. Chat-scoped tools (billing, documents, prefs) are built **per-run with `chatId` captured in a closure**, so the model never passes plumbing and concurrent chats can't cross-contaminate drafts.
+One chat = one stored message thread (`prefs.__history`, trimmed to the last 40 messages and stripped of image bytes). **Durable state is in SQLite tables, never in the thread**, so `/new` clears the chat but the store still knows stock, khata, bills and the owner's preferences. Chat-scoped tools (billing, documents, prefs) are built **per-run with `chatId` captured in a closure**, so the model never passes plumbing and concurrent chats can't cross-contaminate drafts.
 
 ## Skills & tools (the capability surface)
 
-Skills are thin playbooks; tools are thin but **rule-strict** — a tool never trusts the model on stock/price/GST, it recomputes and guards. 8 skills, 34 tools (the `vision` skill is a pure playbook — it composes inventory and document tools):
+Skills are thin playbooks; tools are thin but **rule-strict** — a tool never trusts the model on stock/price/GST, it recomputes and guards. 8 skills, 34 store tools (+ `read_skill`) (the `vision` skill is a pure playbook — it composes inventory and document tools):
 
 | Skill | Tools |
 |-------|-------|
@@ -56,8 +57,8 @@ The **system prompt stays thin** — persona, "always ground via tools / never i
 | **Idempotency** | (a) `processed_updates(update_id)` drops Telegram redeliveries at ingress. (b) `bills.idempotency_key UNIQUE` (`finalize-bill-<id>`) → a retried finalize returns the same bill with **no double-decrement**. |
 | **Concurrency** | `better-sqlite3` is synchronous; writes use `BEGIN IMMEDIATE` transactions. Add-time guard is cross-draft aware; finalize re-reads stock inside the txn → stock can never go negative even with two bills / a sale + stock-in in flight. WAL mode. |
 | **Guardrails** | Below-cost sale refused in `add_item`/`add_product`; no delete-stock tool exists; `khata_payment` refuses an unknown customer or an over-payment. |
-| **Real artifacts** | `pdfkit` renders a GST tax invoice (shop header + GSTIN, per-line HSN/CGST/SGST, per-slab summary, total in words). `pptxgenjs` builds a 4-slide deck with **real charts** (bar/doughnut/line), GST-slab table, stock-health table and written insights. Delivered via a DB outbox → `sendDocument`. |
-| **Memory across sessions** | `prefs` table keyed by chat; injected into the system prompt each turn. `/new` deletes only the session id — preferences and all store data persist. |
+| **Real artifacts** | `pdfkit` renders a GST tax invoice (shop header + GSTIN, per-line HSN/CGST/SGST, per-slab summary, total in words). `pptxgenjs` builds a deck (up to 6 slides) with **real charts** (bar/doughnut/line), GST-slab table, stock-health table, velocity reorder plan, expiry watch and written insights. Delivered via a DB outbox → `sendDocument`. |
+| **Memory across sessions** | `prefs` table keyed by chat; injected into the system prompt each turn. `/new` deletes only the message thread — preferences and all store data persist. |
 
 ## Stretch features
 
@@ -74,7 +75,7 @@ The **system prompt stays thin** — persona, "always ground via tools / never i
 ## Run locally
 
 ```bash
-cp .env.example .env      # set TELEGRAM_BOT_TOKEN + ANTHROPIC_API_KEY
+cp .env.example .env      # set TELEGRAM_BOT_TOKEN + AI_GATEWAY_API_KEY
 npm install
 npm run seed              # load 18 real SKUs (idempotent)
 npm run dev               # long-poll bot

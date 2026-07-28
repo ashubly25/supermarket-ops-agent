@@ -1,6 +1,12 @@
 # Supermarket Ops Agent — Design & Build Plan
 
-Harness: **Claude Agent SDK (TypeScript)**. Interface: **Telegram**. Store: **SQLite**.
+> **Historical document.** This is the original plan, written against the Claude Agent SDK.
+> The build later moved to the **Vercel AI SDK** (`generateText` + `stepCountIs`, message
+> history in SQLite, skills loaded via a `read_skill` tool). The domain model, tool surface
+> and hard-part strategy below still describe the code; the harness section does not.
+> **`README.md` is the accurate description of what shipped.**
+
+Harness: **Claude Agent SDK (TypeScript)** *(superseded — see note above)*. Interface: **Telegram**. Store: **SQLite**.
 
 ---
 

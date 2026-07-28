@@ -1,4 +1,4 @@
-import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { tool } from "../lib/tool.js";
 import { z } from "zod";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { extname, join } from "node:path";
@@ -32,6 +32,8 @@ export function makeDocumentTools(ctx: Ctx) {
     async ({ bill_id }) => {
       const bill = bills.getBill(bill_id);
       if (!bill) return err(`Bill #${bill_id} not found.`);
+      // Bills belong to the chat that cut them — never render another shop's invoice.
+      if (bill.chat_id !== ctx.chatId) return err(`Bill #${bill_id} does not belong to this shop.`);
       if (bill.status !== "final") return err(`Bill #${bill_id} is a ${bill.status}; finalize it before making an invoice.`);
       const items = bills.getItems(bill_id);
       try {

@@ -1,6 +1,6 @@
 /**
  * Local smoke REPL — drive the agent WITHOUT Telegram.
- * Needs ANTHROPIC_API_KEY set. Usage:
+ * Needs AI_GATEWAY_API_KEY set. Usage:
  *   npm run smoke                       # interactive REPL
  *   npm run smoke -- "how much sugar is left?"   # one-shot
  * Uses a fixed chat id "local-smoke" so a session/preferences persist between runs.
@@ -13,7 +13,7 @@ import { takeOutbox, markSent } from "./repo/updates.js";
 import { requireEnv } from "./config.js";
 
 const CHAT = "local-smoke";
-requireEnv("ANTHROPIC_API_KEY");
+requireEnv("AI_GATEWAY_API_KEY");
 
 async function turn(msg: string) {
   if (msg.trim() === "/new") {

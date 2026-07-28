@@ -32,7 +32,9 @@ export async function buildDeck(chatId: string, from: string, to: string) {
 
 /** Owner-facing reminder digest for khata that has gone quiet. */
 export function khataDigest(chatId: string): { text: string; count: number } {
-  const days = Number(getPrefs(chatId).khata_reminder_days ?? 14);
+  const raw = Number(getPrefs(chatId).khata_reminder_days);
+  const days = Number.isFinite(raw) && raw >= 0 ? raw : 14; // ignore a garbled pref
+
   const rows = khata.overdue(days);
   if (rows.length === 0) return { text: `No khata overdue past ${days} days. All settled up.`, count: 0 };
   const total = rows.reduce((a, r) => a + r.balance, 0);

@@ -22,11 +22,11 @@ test("ingress idempotency: a redelivered update_id is dropped", () => {
 test("preferences survive a /new session reset (only session id is cleared)", () => {
   const CHAT = "pref-chat";
   prefs.setPref(CHAT, "default_payment", "upi");
-  prefs.setPref(CHAT, "__session_id", "abc-123");
-  // Simulate /new: agent.resetSession deletes only __session_id.
-  prefs.deletePref(CHAT, "__session_id");
+  prefs.setPref(CHAT, "__history", "abc-123");
+  // Simulate /new: agent.resetSession deletes only the stored history.
+  prefs.deletePref(CHAT, "__history");
   assert.equal(prefs.getPref(CHAT, "default_payment"), "upi", "durable pref must remain");
-  assert.equal(prefs.getPref(CHAT, "__session_id"), undefined, "session must be cleared");
+  assert.equal(prefs.getPref(CHAT, "__history"), undefined, "session must be cleared");
 });
 
 test("concurrency: two drafts cannot jointly oversell; stock never goes negative", () => {
