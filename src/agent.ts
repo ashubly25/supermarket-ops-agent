@@ -1,8 +1,8 @@
-import { generateText, stepCountIs, type LanguageModel, type ModelMessage } from "ai";
+import { generateText, stepCountIs, hasToolCall, type LanguageModel, type ModelMessage } from "ai";
 import { MODEL } from "./config.js";
 import { getPrefs } from "./repo/prefs.js";
 import { getHistory, setHistory, clearHistory } from "./repo/history.js";
-import { toolset } from "./lib/tool.js";
+import { toolset, type StoreTool } from "./lib/tool.js";
 import { skillIndex, readSkillTool } from "./lib/skills.js";
 import { inventoryTools } from "./tools/inventory.js";
 import { makeBillingTools } from "./tools/billing.js";
@@ -14,25 +14,51 @@ import { makeScheduleTools } from "./tools/schedules.js";
 import { language } from "./lib/shop.js";
 
 /**
- * Build the store's tool surface for ONE chat. Chat-scoped tools (billing, khata,
- * documents, prefs, schedules) capture
- * chatId in a closure, so the model never has to pass plumbing like chat_id — and
- * concurrent chats can't cross-contaminate their draft bills.
+ * The store's tools, grouped by the skill that documents them. Chat-scoped groups capture
+ * chatId in a closure, so the model never passes plumbing like chat_id — and concurrent
+ * chats can't cross-contaminate their draft bills.
  */
-function buildTools(chatId: string) {
-  return toolset([
-    ...inventoryTools,
-    ...makeBillingTools({ chatId }),
-    ...makeKhataTools({ chatId }),
-    ...analyticsTools,
-    ...makeDocumentTools({ chatId }),
-    ...makePrefTools({ chatId }),
-    ...makeScheduleTools({ chatId }),
-    readSkillTool,
-  ]);
+function toolGroups(chatId: string): Record<string, StoreTool[]> {
+  return {
+    inventory: inventoryTools,
+    billing: makeBillingTools({ chatId }),
+    khata: makeKhataTools({ chatId }),
+    analytics: analyticsTools,
+    documents: makeDocumentTools({ chatId }),
+    memory: makePrefTools({ chatId }),
+    scheduling: makeScheduleTools({ chatId }),
+  };
+}
+
+/**
+ * Names that stay available on every turn, so the commonest question ("how much sugar is
+ * left?") costs one round trip and no skill read. Everything else is gated.
+ */
+const ALWAYS_ON = new Set(["find_product", "get_stock", "low_stock"]);
+
+/** How many skill-unlock passes one owner message may take before we answer with what we have. */
+const SKILLS_PER_TURN = 4;
+
+/**
+ * Progressive disclosure of TOOLS, not just of playbooks. Sending all 34 schemas cost
+ * ~4,900 tokens on every single step — far more than the conversation itself — and the
+ * model only ever needs one or two domains per turn. So a turn starts with the core plus
+ * read_skill, and reading a skill unlocks that skill's tools for the rest of the turn.
+ * The skills stop being advisory and start being the thing that grants capability.
+ */
+function buildTools(chatId: string, unlocked: ReadonlySet<string>) {
+  const groups = toolGroups(chatId);
+  const core = Object.values(groups)
+    .flat()
+    .filter((t) => ALWAYS_ON.has(t.name));
+  const opened = [...unlocked].flatMap((skill) => groups[skill] ?? []);
+  return toolset([...core, ...opened, readSkillTool]);
 }
 
 function systemPrompt(chatId: string): string {
+  const gated = Object.fromEntries(
+    Object.entries(toolGroups(chatId)).map(([skill, tools]) => [skill, tools.map((t) => t.name).filter((n) => !ALWAYS_ON.has(n))])
+  );
   const prefs = getPrefs(chatId);
   const prefLines =
     Object.keys(prefs).filter((k) => !k.startsWith("__")).length > 0
@@ -65,6 +91,10 @@ CORE RULES
 - The tools enforce the hard rules (oversell guard, GST maths, below-cost refusal, idempotency). If a tool returns an error, relay it plainly and suggest the fix. Do not try to override a guard.
 - Money is in ₹ (INR). Be terse and shopkeeper-friendly. Confirm actions with the key numbers.
 - Only ask a clarifying question when genuinely ambiguous; otherwise act.
+- NEVER report an action you did not perform with a tool. If the tool you need isn't in front of you,
+  read_skill its domain and then call it. Saying a PDF, deck, bill or schedule is "on its way" without
+  the tool call having succeeded is the worst thing you can do — the owner believes their books moved
+  when nothing happened.
 
 OUTPUT FORMAT (you are writing into a Telegram chat, which renders NO markdown)
 - Write plain text. No **bold**, no *italics*, no backticks, no # headings — the asterisks show up literally on the owner's phone.
@@ -76,8 +106,10 @@ LANGUAGE
 - Reply in: ${language(chatId)}. If that is hindi or tamil, write in that language's own script (Devanagari / தமிழ்) using everyday shop vocabulary; keep numbers, ₹ amounts, GST%, product brand names and tool arguments as-is. Invoices and decks stay in English (legal documents).
 - The owner may write in any language; understand it regardless.
 
-SKILLS (playbooks — call read_skill with the name before doing that kind of work; they hold the detail this prompt omits):
-${skillIndex()}
+SKILLS — each is a playbook AND the key to its tools. You start with only find_product, get_stock and
+low_stock; read_skill(name) returns the playbook and unlocks that skill's tools for this turn. So to bill,
+read billing first; to receive stock, read inventory; and so on. One read per domain you actually need:
+${skillIndex(gated)}
 
 OWNER PREFERENCES (remembered across chats — apply them unless the owner overrides in-message):
 ${prefLines}`;
@@ -104,23 +136,50 @@ export async function runAgent(
   // Once a tool has run, the turn has side effects (stock received, khata charged) that a
   // replay would repeat, so we surface the error instead and let the owner resend.
   let toolRan = false;
-  const result = await withRateLimitRetry(
-    () =>
-      generateText({
-        model,
-        system: systemPrompt(chatId),
-        messages,
-        tools: buildTools(chatId),
-        stopWhen: stepCountIs(16),
-        onStepFinish: (step) => {
-          if (step.toolCalls.length > 0) toolRan = true;
-        },
-      }),
-    () => !toolRan
-  );
+  const unlocked = new Set<string>();
+  const convo: ModelMessage[] = [...messages];
+  let steps = 0;
+  let text = "";
 
-  setHistory(chatId, [...messages, ...result.response.messages]);
-  return { text: result.text.trim() || "(no response)", steps: result.steps.length };
+  // Each pass runs until the model either finishes or reads a skill. Reading a skill
+  // unlocks its tools, so we start the next pass with a wider surface and the same
+  // conversation. Bounded so a model that only ever reads skills still terminates.
+  for (let pass = 0; pass < SKILLS_PER_TURN; pass++) {
+    const result = await withRateLimitRetry(
+      () =>
+        generateText({
+          model,
+          system: systemPrompt(chatId),
+          messages: convo,
+          tools: buildTools(chatId, unlocked),
+          // hasToolCall ends the pass right after read_skill's result lands, so the model
+          // never has to reason on with tools it can't see yet.
+          stopWhen: [stepCountIs(16), hasToolCall("read_skill")],
+          onStepFinish: (step) => {
+            if (step.toolCalls.length > 0) toolRan = true;
+          },
+        }),
+      () => !toolRan
+    );
+
+    convo.push(...result.response.messages);
+    steps += result.steps.length;
+    text = result.text.trim() || text;
+
+    const read = result.steps
+      .flatMap((s) => s.toolCalls)
+      .filter((c) => c.toolName === "read_skill")
+      // One call may name several skills ("billing, documents") — unlock all of them.
+      .flatMap((c) => String((c.input as { name?: string })?.name ?? "").split(","))
+      .map((n) => n.trim().toLowerCase())
+      .filter((n) => n && !unlocked.has(n));
+
+    if (read.length === 0) break; // nothing new opened: this pass was the answer
+    for (const n of read) unlocked.add(n);
+  }
+
+  setHistory(chatId, convo);
+  return { text: text || "(no response)", steps };
 }
 
 const isRateLimit = (e: unknown): boolean =>

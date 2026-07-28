@@ -32,10 +32,23 @@ function load(): Skill[] {
 
 export const SKILLS: Skill[] = load();
 
-/** The index that goes in the system prompt — names + descriptions only. */
-export function skillIndex(): string {
+/**
+ * The index that goes in the system prompt — descriptions plus the NAMES of the tools each
+ * skill unlocks.
+ *
+ * The names matter as much as the descriptions. With schemas withheld until a skill is read,
+ * a model that cannot see `generate_invoice_pdf` may conclude the capability doesn't exist
+ * and simply claim the work is done — observed exactly once here, a fabricated "PDF is on its
+ * way" with an empty outbox. Listing the names costs a few tokens per skill and removes the
+ * ambiguity: the capability is real, and reading the skill is how you reach it.
+ */
+export function skillIndex(toolNames: Record<string, string[]> = {}): string {
   if (SKILLS.length === 0) return "- (none)";
-  return SKILLS.map((s) => `- ${s.name}: ${s.description}`).join("\n");
+  return SKILLS.map((s) => {
+    const names = toolNames[s.name];
+    const unlocks = names?.length ? `\n  unlocks: ${names.join(", ")}` : "";
+    return `- ${s.name}: ${s.description}${unlocks}`;
+  }).join("\n");
 }
 
 /**
@@ -44,15 +57,30 @@ export function skillIndex(): string {
  */
 export const readSkillTool: StoreTool = tool(
   "read_skill",
-  `Read the full playbook for one of the store's skills before doing that kind of work. Available: ${SKILLS.map((s) => s.name).join(", ")}.`,
-  { name: z.string().describe("Skill name, e.g. 'billing'") },
+  `Open one or more skills: returns their playbooks AND unlocks their tools, which are not available until you do. Call this first for the domains this turn needs — if a tool you expect is missing, this is why. Name several at once ("billing, documents") when the job spans them; that costs one round trip instead of two. Available: ${SKILLS.map((s) => s.name).join(", ")}.`,
+  {
+    name: z
+      .string()
+      .describe("Skill name, or several comma-separated when the turn needs them all, e.g. 'billing, documents'"),
+  },
   async ({ name }) => {
-    const s = SKILLS.find((x) => x.name === name.trim().toLowerCase());
-    if (!s)
+    const wanted = name
+      .split(",")
+      .map((n) => n.trim().toLowerCase())
+      .filter(Boolean);
+    const found = wanted.map((n) => SKILLS.find((x) => x.name === n)).filter((s): s is Skill => !!s);
+    const missing = wanted.filter((n) => !SKILLS.some((x) => x.name === n));
+
+    if (found.length === 0)
       return {
         content: [{ type: "text", text: `No skill "${name}". Available: ${SKILLS.map((x) => x.name).join(", ")}.` }],
         isError: true,
       };
-    return { content: [{ type: "text", text: s.body }], structuredContent: { skill: s.name } };
+
+    const note = missing.length ? `\n\n(No such skill: ${missing.join(", ")}.)` : "";
+    return {
+      content: [{ type: "text", text: found.map((s) => `## SKILL: ${s.name}\n\n${s.body}`).join("\n\n---\n\n") + note }],
+      structuredContent: { skills: found.map((s) => s.name) },
+    };
   }
 );

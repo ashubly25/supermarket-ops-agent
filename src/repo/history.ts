@@ -31,8 +31,41 @@ function trim(msgs: ModelMessage[]): ModelMessage[] {
   return out;
 }
 
+/**
+ * Drop `read_skill` calls and their payloads before persisting.
+ *
+ * A skill body is 2–4k characters. Left in the thread it is re-sent on every later turn of
+ * the conversation, so a single "read billing" keeps costing tokens for the rest of the day —
+ * and it is the one message we can always reproduce, because the model can just read the
+ * skill again. Both halves go: an orphaned tool call, or a result with no call, is a hard API
+ * error, so the call parts and their results are removed together.
+ */
+function stripSkillReads(msgs: ModelMessage[]): ModelMessage[] {
+  const skillCallIds = new Set<string>();
+  for (const m of msgs) {
+    if (!Array.isArray(m.content)) continue;
+    for (const part of m.content as any[]) {
+      if (part?.type === "tool-call" && part.toolName === "read_skill") skillCallIds.add(part.toolCallId);
+    }
+  }
+  if (skillCallIds.size === 0) return msgs;
+
+  const out: ModelMessage[] = [];
+  for (const m of msgs) {
+    if (!Array.isArray(m.content)) {
+      out.push(m);
+      continue;
+    }
+    const kept = (m.content as any[]).filter(
+      (p) => !((p?.type === "tool-call" || p?.type === "tool-result") && skillCallIds.has(p.toolCallId))
+    );
+    if (kept.length > 0) out.push({ ...m, content: kept } as ModelMessage);
+  }
+  return out;
+}
+
 export function setHistory(chatId: string, msgs: ModelMessage[]): void {
-  setPref(chatId, HISTORY_KEY, JSON.stringify(trim(msgs)));
+  setPref(chatId, HISTORY_KEY, JSON.stringify(trim(stripSkillReads(msgs))));
 }
 
 export function clearHistory(chatId: string): void {
