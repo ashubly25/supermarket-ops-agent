@@ -1,0 +1,33 @@
+{
+  "name": "supermarket-ops-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Conversational agent that runs an Indian kirana store from Telegram. Claude Agent SDK.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && mkdir -p dist/db && cp src/db/schema.sql dist/db/schema.sql",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "seed": "tsx src/db/seed.ts",
+    "test": "node --import tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "better-sqlite3": "^11.8.1",
+    "grammy": "^1.30.0",
+    "pdfkit": "^0.15.1",
+    "pptxgenjs": "^3.12.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.5",
+    "@types/pdfkit": "^0.13.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "allowScripts": {
+    "better-sqlite3@11.10.0": true,
+    "esbuild@0.28.1": true
+  }
+}

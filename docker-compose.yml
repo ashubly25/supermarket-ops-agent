@@ -1,0 +1,16 @@
+services:
+  agent:
+    build: .
+    container_name: supermarket-ops-agent
+    restart: always
+    env_file: .env
+    environment:
+      DB_PATH: /app/data/store.db
+      ARTIFACTS_DIR: /app/artifacts
+    volumes:
+      - store-data:/app/data
+      - store-artifacts:/app/artifacts
+
+volumes:
+  store-data:
+  store-artifacts:

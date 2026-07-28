@@ -1,0 +1,9 @@
+node_modules
+dist
+data
+artifacts
+.git
+*.log
+.env
+test
+PLAN.md
