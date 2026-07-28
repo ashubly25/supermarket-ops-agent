@@ -19,7 +19,7 @@ No inbound port needs opening — the bot long-polls, so it only makes outbound 
 git clone https://github.com/ashubly25/assessment.git supermarket-ops-agent
 cd supermarket-ops-agent
 bash deploy.sh    # installs Docker, copies .env.example → .env, then exits
-nano .env         # set TELEGRAM_BOT_TOKEN + either ANTHROPIC_API_KEY or AI_GATEWAY_API_KEY
+nano .env         # set TELEGRAM_BOT_TOKEN + one of ANTHROPIC_API_KEY / OPENROUTER_API_KEY / AI_GATEWAY_API_KEY
 bash deploy.sh    # builds and starts; expect "Bot online as @<username>"
 docker compose logs -f
 ```

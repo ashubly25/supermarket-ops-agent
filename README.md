@@ -120,7 +120,7 @@ Both require a reason on the audit trail, and both skills instruct the agent to 
 ## Run locally
 
 ```bash
-cp .env.example .env      # TELEGRAM_BOT_TOKEN + ANTHROPIC_API_KEY (or AI_GATEWAY_API_KEY)
+cp .env.example .env      # TELEGRAM_BOT_TOKEN + one of ANTHROPIC_API_KEY / OPENROUTER_API_KEY / AI_GATEWAY_API_KEY
 npm install
 npm run seed              # load 19 real SKUs (idempotent)
 npm run dev               # long-poll bot
