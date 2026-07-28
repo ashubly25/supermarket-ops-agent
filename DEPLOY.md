@@ -8,24 +8,27 @@ Goal: an always-on Telegram bot with a persistent SQLite file, free forever.
 
 ## 2. Provision the VM (one-time)
 1. Oracle Cloud → **Compute → Instances → Create**.
-2. Shape: **Ampere A1 (ARM)** or **VM.Standard.E2.1.Micro (x86)** — both are in the *Always Free* tier.
+2. Shape: **Ampere A1 (ARM)**, 1 OCPU / 6 GB — *Always Free*. Prefer it over
+   `VM.Standard.E2.1.Micro`: the micro's 1 GB RAM OOMs during the image build
+   (`deploy.sh` adds swap to cope, but A1 just works).
 3. Image: **Ubuntu 22.04**. Add your SSH key. Create.
 4. SSH in: `ssh ubuntu@<public-ip>`.
 
-## 3. Install Docker
+No inbound port needs opening — the bot long-polls, so it only makes outbound HTTPS.
+
+## 3. Run the agent
 ```bash
-sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin git
-sudo usermod -aG docker $USER && newgrp docker
+git clone https://github.com/ashubly25/assessment.git supermarket-ops-agent
+cd supermarket-ops-agent
+bash deploy.sh    # installs Docker, copies .env.example → .env, then exits
+nano .env         # set TELEGRAM_BOT_TOKEN + either ANTHROPIC_API_KEY or AI_GATEWAY_API_KEY
+bash deploy.sh    # builds and starts; expect "Bot online as @<username>"
+docker compose logs -f
 ```
 
-## 4. Run the agent
-```bash
-git clone <your-repo> supermarket-ops-agent && cd supermarket-ops-agent
-cp .env.example .env
-nano .env         # set TELEGRAM_BOT_TOKEN and AI_GATEWAY_API_KEY
-docker compose up -d --build
-docker compose logs -f          # expect: "Bot online as @<username>"
-```
+`deploy.sh` handles the two Oracle-image traps: `iptables -P FORWARD REJECT`, which
+silently kills *all* container egress because Docker appends its bridge rules after
+that policy, and low-RAM shapes (adds a 2 GB swapfile).
 
 `restart: always` keeps it up across reboots. The SQLite DB lives in the `store-data`
 Docker volume, so stock / khata / bills / preferences survive restarts and redeploys.

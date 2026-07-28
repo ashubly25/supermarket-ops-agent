@@ -13,7 +13,7 @@ Run an Indian kirana / supermarket store end-to-end from a Telegram chat — rec
 - `generateText({ tools, stopWhen: stepCountIs(16) })` **runs the agent loop for us** — observe → reason → call tool → feed result back → continue, chaining multiple tool calls in a single turn. There is **no intent router / regex**; the model orchestrates. (A keyword router would be an automatic fail per the brief.)
 - Tools are plain functions defined with `tool()` and run **in-process** — same Node runtime as SQLite and the Telegram client — so every business rule (oversell, GST, idempotency) is enforced in code **where the data changes**, not hoped for in a prompt.
 - **Zod** schemas type and validate every tool input; the model retries on mismatch.
-- The SDK is provider-agnostic and the model id is a plain `"<provider>/<model>"` string routed through the **AI Gateway** (`AI_GATEWAY_API_KEY`), so switching provider is an env-var change, not a code change. `runAgent` also takes a `model` override, which is how `test/agent.test.ts` drives the real loop offline against a mock model.
+- The SDK is provider-agnostic, so **which key is in `.env` decides the route**: `ANTHROPIC_API_KEY` talks to Anthropic directly, `AI_GATEWAY_API_KEY` hands the SDK a bare `"<provider>/<model>"` string and lets the **Vercel AI Gateway** route it. Swapping provider is an env-var change, not a code change. `runAgent` also takes a `model` override, which is how `test/agent.test.ts` drives the real loop offline against a mock model.
 - **Skills** (`.claude/skills/*/SKILL.md`) are the model-facing playbooks, loaded by `src/lib/skills.ts`: the system prompt carries only the one-line index and the model pulls a full playbook with `read_skill` (progressive disclosure).
 - TS pairs with the best doc libraries: `grammY`, `pdfkit`, `pptxgenjs`, `better-sqlite3`.
 
@@ -75,7 +75,7 @@ The **system prompt stays thin** — persona, "always ground via tools / never i
 ## Run locally
 
 ```bash
-cp .env.example .env      # set TELEGRAM_BOT_TOKEN + AI_GATEWAY_API_KEY
+cp .env.example .env      # TELEGRAM_BOT_TOKEN + ANTHROPIC_API_KEY (or AI_GATEWAY_API_KEY)
 npm install
 npm run seed              # load 18 real SKUs (idempotent)
 npm run dev               # long-poll bot

@@ -113,16 +113,49 @@ export async function runAgent(
   const history = getHistory(chatId);
   const messages: ModelMessage[] = [...history, userMessage(message, imagePath)];
 
-  const result = await generateText({
-    model,
-    system: systemPrompt(chatId),
-    messages,
-    tools: buildTools(chatId),
-    stopWhen: stepCountIs(16),
-  });
+  // A gateway 429 on the *first* model call is worth retrying — nothing has happened yet.
+  // Once a tool has run, the turn has side effects (stock received, khata charged) that a
+  // replay would repeat, so we surface the error instead and let the owner resend.
+  let toolRan = false;
+  const result = await withRateLimitRetry(
+    () =>
+      generateText({
+        model,
+        system: systemPrompt(chatId),
+        messages,
+        tools: buildTools(chatId),
+        stopWhen: stepCountIs(16),
+        onStepFinish: (step) => {
+          if (step.toolCalls.length > 0) toolRan = true;
+        },
+      }),
+    () => !toolRan
+  );
 
   setHistory(chatId, [...messages, ...result.response.messages]);
   return { text: result.text.trim() || "(no response)", steps: result.steps.length };
+}
+
+const isRateLimit = (e: unknown): boolean =>
+  /rate.?limit|429|quota|overloaded/i.test(String((e as Error)?.message ?? e) + String((e as any)?.name ?? ""));
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Retry a rate-limited model call with exponential backoff, but only while `safe()`
+ * says a replay has no side effects to repeat.
+ */
+async function withRateLimitRetry<T>(fn: () => Promise<T>, safe: () => boolean, attempts = 3): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i >= attempts - 1 || !isRateLimit(e) || !safe()) throw e;
+      const wait = 1500 * 2 ** i;
+      console.warn(`model rate-limited, retrying in ${wait}ms (attempt ${i + 2}/${attempts})`);
+      await sleep(wait);
+    }
+  }
 }
 
 /** /new — forget the conversation for this chat. Durable store data is untouched. */
