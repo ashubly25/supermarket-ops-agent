@@ -62,12 +62,17 @@ if [ ! -f .env ]; then
   cp .env.example .env
   echo
   echo "==> Created .env — fill in your keys, then re-run:  bash deploy.sh"
-  echo "    nano .env   # set TELEGRAM_BOT_TOKEN and AI_GATEWAY_API_KEY"
+  echo "    nano .env   # set TELEGRAM_BOT_TOKEN + ANTHROPIC_API_KEY or AI_GATEWAY_API_KEY"
   exit 0
 fi
 
-if ! grep -q '^TELEGRAM_BOT_TOKEN=.\+' .env || ! grep -q '^AI_GATEWAY_API_KEY=.\+' .env; then
-  echo "!! .env is missing TELEGRAM_BOT_TOKEN or AI_GATEWAY_API_KEY. Edit it and re-run." >&2
+if ! grep -q '^TELEGRAM_BOT_TOKEN=.\+' .env; then
+  echo "!! .env is missing TELEGRAM_BOT_TOKEN. Edit it and re-run." >&2
+  exit 1
+fi
+# Either model route is fine; config.ts prefers a direct Anthropic key when both are set.
+if ! grep -q '^ANTHROPIC_API_KEY=.\+' .env && ! grep -q '^AI_GATEWAY_API_KEY=.\+' .env; then
+  echo "!! .env needs ANTHROPIC_API_KEY (direct) or AI_GATEWAY_API_KEY (Vercel AI Gateway)." >&2
   exit 1
 fi
 
