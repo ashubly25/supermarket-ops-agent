@@ -1,6 +1,7 @@
 import { Bot, InputFile } from "grammy";
 import { requireEnv } from "./config.js";
 import { runAgent, resetSession } from "./agent.js";
+import { toPlainText } from "./lib/plain.js";
 import { markProcessed, takeOutbox, markSent } from "./repo/updates.js";
 import { takeNotices, markNoticeSent, chatsWithPending } from "./repo/schedules.js";
 
@@ -48,7 +49,8 @@ async function handleTurn(bot: Bot, ctx: any, chatId: string, text: string): Pro
   await ctx.replyWithChatAction("typing").catch(() => {});
   try {
     const { text: reply } = await runAgent(chatId, text);
-    await ctx.reply(reply, { link_preview_options: { is_disabled: true } });
+    // Telegram gets no parse_mode, so markdown would render literally. Normalise at the exit.
+    await ctx.reply(toPlainText(reply), { link_preview_options: { is_disabled: true } });
     await flushChat(bot, chatId);
   } catch (e) {
     console.error("agent error:", e);

@@ -69,6 +69,12 @@ export function seed(): number {
   const addBatch = db.prepare(
     "INSERT INTO batches (product_id, batch_no, qty, cost_price, expiry) VALUES (?, ?, ?, ?, ?)"
   );
+  // Tax law changes; the catalogue must follow. INSERT OR IGNORE leaves existing rows alone,
+  // so a store seeded before a slab change would keep billing the old rate forever. Prices and
+  // quantities are the owner's business and stay untouched — only the tax identity is corrected.
+  const retax = db.prepare(
+    "UPDATE products SET gst_rate = @gst, hsn = @hsn WHERE name = @name AND size = @size AND (gst_rate != @gst OR hsn != @hsn)"
+  );
   const dayShift = (d: number) => {
     const x = new Date();
     x.setDate(x.getDate() + d);
@@ -77,12 +83,16 @@ export function seed(): number {
 
   const tx = db.transaction((rows: Seed[]) => {
     let n = 0;
+    let retaxed = 0;
     for (const r of rows) {
       const info = insert.run({
         ...r,
         perishable: r.perishable ?? 0,
       });
-      if (info.changes === 0) continue; // already seeded
+      if (info.changes === 0) {
+        retaxed += retax.run({ name: r.name, size: r.size, gst: r.gst, hsn: r.hsn }).changes;
+        continue; // already seeded
+      }
       n += 1;
       // Opening stock as a batch, dated when the SKU is perishable → FEFO has real data.
       const id = Number(info.lastInsertRowid);
@@ -91,6 +101,7 @@ export function seed(): number {
       const fresh = r.qty - (stale?.qty ?? 0);
       if (fresh > 0) addBatch.run(id, "opening", fresh, r.cost, r.expires_in != null ? dayShift(r.expires_in) : null);
     }
+    if (retaxed > 0) console.log(`Corrected GST slab / HSN on ${retaxed} existing SKU(s).`);
     return n;
   });
   return tx(SKUS);
