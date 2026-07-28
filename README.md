@@ -70,6 +70,6 @@ today's sales?  ·  send me that bill as a PDF  ·  make this week's analysis de
 always assume UPI unless I say cash     ·   then /new — it still applies
 ```
 
-**More:** design decisions and domain research in [`DESIGN.md`](DESIGN.md) · deployment in [`DEPLOY.md`](DEPLOY.md) · demo script in [`RECORDING.md`](RECORDING.md).
+**More:** design decisions and domain research in [`DESIGN.md`](DESIGN.md) · deployment in [`DEPLOY.md`](DEPLOY.md) 
 
 > One deliberate divergence: the 12% GST slab was abolished on 22 Sep 2025, so the brief's `GST 12%` example is corrected to 5% and the agent says why. Reasoning in [`DESIGN.md`](DESIGN.md).
