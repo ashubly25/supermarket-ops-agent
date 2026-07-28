@@ -25,9 +25,17 @@ function err(text: string) {
 export function makeDocumentTools(ctx: Ctx) {
   const invoicePdf = tool(
     "generate_invoice_pdf",
-    "Generate a clean, GST-correct PDF tax invoice for a FINALIZED bill and send it to the owner. Uses the shop's name/GSTIN/address from preferences. Provide the bill id (from the finalized bill).",
-    { bill_id: z.number().int().describe("The bill's id (must be finalized)") },
-    async ({ bill_id }) => {
+    "Generate a clean, GST-correct PDF tax invoice for a FINALIZED bill and send it to the owner. Uses the shop's name/GSTIN/address from preferences. Omit bill_id for 'that bill' / 'the last bill' — it defaults to the most recent finalized bill in this chat.",
+    {
+      bill_id: z
+        .number()
+        .int()
+        .optional()
+        .describe("The bill's id (must be finalized). Defaults to the last finalized bill in this chat."),
+    },
+    async ({ bill_id: requested }) => {
+      const bill_id = requested ?? bills.lastFinalized(ctx.chatId)?.id;
+      if (!bill_id) return err("No finalized bill in this chat yet — finalize one first.");
       const bill = bills.getBill(bill_id);
       if (!bill) return err(`Bill #${bill_id} not found.`);
       // Bills belong to the chat that cut them — never render another shop's invoice.
