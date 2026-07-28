@@ -50,6 +50,13 @@ export function lowStock(): Product[] {
 
 export function addProduct(p: Omit<Product, "id" | "perishable"> & { perishable?: number }): Product {
   return immediateTxn(() => {
+    // The tool checks this too, but the rule belongs where the row is written: a SKU created
+    // under cost books a loss on every later sale, and receiveStock/setItemQty/finalize all
+    // guard the same invariant. Defence in depth, not a duplicated opinion.
+    if (p.sell_price < p.cost_price)
+      throw new Error(
+        `Refusing: ${p.name} sell ₹${p.sell_price} is below cost ₹${p.cost_price}. Confirm the numbers.`
+      );
     const info = db
       .prepare(
         `INSERT INTO products (name, size, unit, loose, hsn, gst_rate, cost_price, mrp, sell_price, qty, reorder_level, perishable)

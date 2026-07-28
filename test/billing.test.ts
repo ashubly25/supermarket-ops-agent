@@ -112,11 +112,25 @@ test("khata: paying more than owed leaves an advance, not an error", () => {
 });
 
 test("below-cost sale is refused at the tool/repo layer", () => {
-  // Force a below-cost product and attempt to bill it.
+  // A below-cost SKU can no longer be created through addProduct...
+  assert.throws(
+    () =>
+      products.addProduct({
+        name: "Test LossLeader", size: "1kg", unit: "packet", loose: 0, hsn: "9999",
+        gst_rate: 5, cost_price: 100, mrp: 120, sell_price: 90, qty: 10, reorder_level: 1,
+      }),
+    /below cost/i,
+    "addProduct must refuse a sell price under cost"
+  );
+
+  // ...but it still arises the realistic way: the SKU was fine, then the wholesaler's
+  // price went up. Billing it must be refused at add time, not discovered at close.
   const p = products.addProduct({
     name: "Test LossLeader", size: "1kg", unit: "packet", loose: 0, hsn: "9999",
-    gst_rate: 5, cost_price: 100, mrp: 120, sell_price: 90, qty: 10, reorder_level: 1,
+    gst_rate: 5, cost_price: 80, mrp: 120, sell_price: 90, qty: 10, reorder_level: 1,
   });
+  db.prepare("UPDATE products SET cost_price = 100 WHERE id = ?").run(p.id);
+
   const d = bills.createDraft(CHAT);
   assert.throws(() => bills.addItem(d.id, p.id, 1), /below cost/);
 });
