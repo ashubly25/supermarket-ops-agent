@@ -14,12 +14,18 @@ export function buildBot(): Bot {
   // uninvited chat could otherwise bill the owner's stock or charge their customers.
   bot.use(async (ctx, next) => {
     const chatId = ctx.chat?.id;
-    if (chatId === undefined || isAllowed(String(chatId))) return next();
-    console.log(`[${chatId}] refused — not in OWNER_CHAT_IDS`);
+    if (chatId === undefined || isAllowed(String(chatId), ctx.from?.username)) return next();
+    console.log(`[${chatId}] refused — not in OWNER_CHAT_IDS (@${ctx.from?.username ?? "no-username"})`);
     await ctx.reply("This bot runs one specific shop's books, and this chat isn't authorised for it.").catch(() => {});
   });
 
-  bot.command("whoami", (ctx) => ctx.reply(`This chat id is ${ctx.chat.id}.`));
+  bot.command("whoami", (ctx) =>
+    ctx.reply(
+      `This chat id is ${ctx.chat.id}` +
+        (ctx.from?.username ? ` (@${ctx.from.username})` : "") +
+        `.\nEither form works in OWNER_CHAT_IDS; the numeric id is the safe one — a username can be changed.`
+    )
+  );
 
   bot.command("start", (ctx) =>
     ctx.reply(

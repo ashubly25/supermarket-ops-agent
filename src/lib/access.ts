@@ -27,9 +27,20 @@ export function ownerChatIds(): Set<string> {
   return parse(process.env.OWNER_CHAT_IDS);
 }
 
-/** True when this chat may operate the store. Open when no allowlist is configured. */
-export function isAllowed(chatId: string, ids: Set<string> = ownerChatIds()): boolean {
-  return ids.size === 0 || ids.has(String(chatId));
+/**
+ * True when this chat may operate the store. Open when no allowlist is configured.
+ *
+ * Entries are either a numeric chat id (canonical — never changes) or an `@username`
+ * (convenient to write, but the user can rename themselves and silently lose access,
+ * so prefer listing both).
+ */
+export function isAllowed(chatId: string, username?: string, ids: Set<string> = ownerChatIds()): boolean {
+  if (ids.size === 0) return true;
+  if (ids.has(String(chatId))) return true;
+  if (!username) return false;
+  const handle = `@${username.replace(/^@/, "").toLowerCase()}`;
+  for (const entry of ids) if (entry.startsWith("@") && entry.toLowerCase() === handle) return true;
+  return false;
 }
 
 /** One line at boot so an operator can see which mode they are in. */
