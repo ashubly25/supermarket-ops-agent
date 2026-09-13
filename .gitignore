@@ -11,3 +11,46 @@ artifacts/
 .env.local
 .vercel/
 .claude
+
+# Secrets and credentials
+.env*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+*.asc
+*.gpg
+credentials.json
+service-account*.json
+gha-creds-*.json
+secrets.*
+*.secret
+.npmrc
+.netrc
+.pgpass
+
+# Local databases and dumps
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sql
+*.dump
+backup*.tar.gz
+
+# Tool and editor local state
+.DS_Store
+.idea/
+.vscode/
+.wrangler/
+.turbo/
+coverage/
+*.tsbuildinfo
