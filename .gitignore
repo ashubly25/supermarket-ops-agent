@@ -10,3 +10,4 @@ artifacts/
 !data/.gitkeep
 .env.local
 .vercel/
+.claude
