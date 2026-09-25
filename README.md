@@ -2,7 +2,7 @@
 
 Run an Indian kirana / supermarket store end-to-end from a Telegram chat — receive stock, cut GST-correct bills, run khata (credit), close the day, and generate PDF invoices & PPTX analysis decks. The chat is the product; there is no web app or menu.
 
-**Live bot:** [`@zwigato_store_bot`](https://t.me/zwigato_store_bot) — message it and drive the §3 scenarios yourself.
+**Live(redacted LLM api) bot:** [`@zwigato_store_bot`](https://t.me/zwigato_store_bot)  — message it and drive the §3 scenarios yourself.
 **Harness:** Vercel AI SDK (TypeScript) · **Store:** SQLite · **Deploy:** Oracle Always Free, long-poll.
 
 
