@@ -5,9 +5,6 @@ Run an Indian kirana / supermarket store end-to-end from a Telegram chat — rec
 **Live bot:** [`@zwigato_store_bot`](https://t.me/zwigato_store_bot) — message it and drive the §3 scenarios yourself.
 **Harness:** Vercel AI SDK (TypeScript) · **Store:** SQLite · **Deploy:** Oracle Always Free, long-poll.
 
-## Why the Vercel AI SDK
-
-`generateText({ tools, stopWhen })` **is** the control loop — observe → reason → call tool → feed the result back → continue, chaining several tool calls per turn. There is no intent router and no regex dispatch; the model orchestrates. Tools are plain functions running **in-process** with SQLite and the Telegram client, so every business rule is enforced in code where the data changes rather than hoped for in a prompt. Zod types every input. The model id is a `provider/model` string, so switching between Anthropic direct, OpenRouter and the Vercel AI Gateway is an env-var change.
 
 ## Control loop
 
